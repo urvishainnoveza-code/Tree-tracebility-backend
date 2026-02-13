@@ -17,7 +17,7 @@ const createCity = async (req, res) => {
   }
 };
 
-const getAllCities = async (req, res) => {
+/*const getAllCities = async (req, res) => {
   try {
     const cities = await City.find({ status: true })
       .populate({
@@ -34,7 +34,46 @@ const getAllCities = async (req, res) => {
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
+};*/
+const getAllCities = async (req, res) => {
+  try {
+    const { page = 1, limit = 10, search = "" } = req.query;
+
+    const query = {
+      status: true,
+      cityname: { $regex: search, $options: "i" },
+    };
+
+    const total = await City.countDocuments(query);
+
+    const cities = await City.find(query)
+      .populate({
+        path: "state",
+        match: { status: true },
+        select: "statename country",
+        populate: {
+          path: "country",
+          match: { status: true },
+          select: "countryname",
+        },
+      })
+      .sort({ cityname: 1 })
+      .skip((page - 1) * limit)
+      .limit(parseInt(limit));
+
+    const filteredCities = cities.filter((city) => city.state !== null);
+
+    res.status(200).json({
+      success: true,
+      data: filteredCities,
+      totalPages: Math.ceil(total / limit),
+      currentPage: Number(page),
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
 };
+
 
 const getCitiesByState = async (req, res) => {
   try {

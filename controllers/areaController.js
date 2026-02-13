@@ -29,7 +29,7 @@ const createArea = async (req, res) => {
   }
 };
 
-const getAllAreas = async (req, res) => {
+/*const getAllAreas = async (req, res) => {
   try {
     const areas = await Area.find({ isActive: true })
       .populate({
@@ -45,7 +45,48 @@ const getAllAreas = async (req, res) => {
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
+};*/
+const getAllAreas = async (req, res) => {
+  try {
+    const { page = 1, limit = 10, search = "" } = req.query;
+
+    const query = {
+      isActive: true,
+      areaname: { $regex: search, $options: "i" },
+    };
+
+    const total = await Area.countDocuments(query);
+
+    const areas = await Area.find(query)
+      .populate({
+        path: "city",
+        select: "cityname state",
+        populate: {
+          path: "state",
+          select: "statename country",
+          populate: {
+            path: "country",
+            select: "countryname",
+          },
+        },
+      })
+      .sort({ areaname: 1 })
+      .skip((page - 1) * limit)
+      .limit(parseInt(limit));
+
+    res.status(200).json({
+      success: true,
+      data: areas,
+      total,
+      currentPage: Number(page),
+      totalPages: Math.ceil(total / limit),
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
 };
+
+
 
 const getAreasByCity = async (req, res) => {
   try {

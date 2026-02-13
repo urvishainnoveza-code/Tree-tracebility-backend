@@ -8,7 +8,8 @@ const {
   verifyOtp,
   getAllUsers,
   deleteUser,
-  createUserByAdmin
+  createUserByAdmin,
+  getUserById
 } = require("../controllers/authController");
 
 const { authMiddleware } = require("../middleware/authMiddleware");

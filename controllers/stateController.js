@@ -53,7 +53,7 @@ const getStateByCountry = async (req, res) => {
   }
 };
 
-const getAllState = async (req, res) => {
+/*const getAllState = async (req, res) => {
   try {
     const states = await State.find({ status: true })
       .populate("country", "countryname")
@@ -66,7 +66,42 @@ const getAllState = async (req, res) => {
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
+};*/
+const getAllState = async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const search = req.query.search || "";
+
+    const skip = (page - 1) * limit;
+
+    const searchFilter = {
+      status: true,
+      ...(search && {
+        statename: { $regex: search, $options: "i" },
+      }),
+    };
+
+    const totalCount = await State.countDocuments(searchFilter);
+
+    const states = await State.find(searchFilter)
+      .populate("country", "countryname")
+      .sort({ statename: 1 })
+      .skip(skip)
+      .limit(limit);
+
+    res.status(200).json({
+      success: true,
+      data: states,
+      totalCount,
+      currentPage: page,
+      totalPages: Math.ceil(totalCount / limit),
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
 };
+
 
 const updateState = async (req, res) => {
   try {

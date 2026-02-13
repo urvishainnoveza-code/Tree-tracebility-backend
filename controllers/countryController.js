@@ -24,14 +24,48 @@ const createCountry = async (req, res) => {
   }
 };
 
-const getAllCountry = async (req, res) => {
+/*const getAllCountry = async (req, res) => {
   try {
     const countries = await Country.find().sort({ countryname: 1 });
     res.status(200).json({ success: true, data: countries });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
+};*/
+const getAllCountry = async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const search = req.query.search || "";
+
+    const skip = (page - 1) * limit;
+
+    // Search filter
+    const searchFilter = search
+      ? {
+          countryname: { $regex: search, $options: "i" },
+        }
+      : {};
+
+    const totalCount = await Country.countDocuments(searchFilter);
+
+    const countries = await Country.find(searchFilter)
+      .sort({ countryname: 1 })
+      .skip(skip)
+      .limit(limit);
+
+    res.status(200).json({
+      success: true,
+      data: countries,
+      totalCount,
+      currentPage: page,
+      totalPages: Math.ceil(totalCount / limit),
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
 };
+
 
 const getCountryById = async (req, res) => {
   try {

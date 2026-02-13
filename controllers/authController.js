@@ -199,7 +199,7 @@ const verifyOtp = async (req, res) => {
     res.status(500).json({ message: "OTP verify failed" });
   }
 };
-const getAllUsers = async (req, res) => {
+/*const getAllUsers = async (req, res) => {
   try {
     const users = await User.find({ userType: "user" }) // no filter on createdBy
       .populate("address.country", "countryname")
@@ -212,7 +212,51 @@ const getAllUsers = async (req, res) => {
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
+};*/
+
+const getAllUsers = async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const search = req.query.search || "";
+
+    const skip = (page - 1) * limit;
+
+    const searchFilter = search
+      ? { firstName: { $regex: search, $options: "i" } }
+      : {};
+
+    const query = {
+      userType: "user",
+      ...searchFilter,
+    };
+
+    const totalCount = await User.countDocuments(query);
+
+    const users = await User.find(query)
+      .populate("address.country", "countryname")
+      .populate("address.state", "statename")
+      .populate("address.city", "cityname")
+      .populate("address.area", "areaname")
+      .select("-password -otp -otpExpires")
+      .skip(skip)
+      .limit(limit);
+
+    res.status(200).json({
+      success: true,
+      users,
+      totalCount,
+      currentPage: page,
+      totalPages: Math.ceil(totalCount / limit),
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
 };
+
 
 
 const deleteUser = async (req, res) => {
@@ -226,4 +270,32 @@ const deleteUser = async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 };
-module.exports = { register, adminLogin, sendOtp, verifyOtp,getAllUsers ,deleteUser,createUserByAdmin};
+const getUserById = async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id)
+      .populate("address.country", "countryname")
+      .populate("address.state", "statename")
+      .populate("address.city", "cityname")
+      .populate("address.area", "areaname")
+      .select("-password -otp -otpExpires");
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      user,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+module.exports = { register, adminLogin, sendOtp, verifyOtp,getAllUsers ,deleteUser,createUserByAdmin,getUserById};

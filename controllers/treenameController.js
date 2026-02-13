@@ -23,7 +23,7 @@ const createTreename = async (req, res) => {
   }
 };
 
- const getAllTreename = async (req, res) => {
+ /*const getAllTreename = async (req, res) => {
   try {
     const trees = await Treename.find().sort({ treename: 1 });
     res.status(201).json({
@@ -36,7 +36,37 @@ const createTreename = async (req, res) => {
       message: error.message,
     });
   }
+};*/
+const getAllTreename = async (req, res) => {
+  try {
+    const { page = 1, limit = 10, search = "" } = req.query;
+
+    const query = {
+      treename: { $regex: search, $options: "i" },
+    };
+
+    const total = await Treename.countDocuments(query);
+
+    const trees = await Treename.find(query)
+      .sort({ treename: 1 })
+      .skip((page - 1) * limit)
+      .limit(parseInt(limit));
+
+    res.status(200).json({
+      success: true,
+      data: trees,
+      total,
+      currentPage: Number(page),
+      totalPages: Math.ceil(total / limit),
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
 };
+
  const getTreenameById = async (req, res) => {
   try {
     const treename = await Treename.findById(req.params.id);
