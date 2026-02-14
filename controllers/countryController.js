@@ -1,131 +1,178 @@
-//import Country from "../models/Country.js";
-const Country = require("../models/Country");
+const asyncHandler = require("express-async-handler");
+const Country = require("../Models/Country");
+const Role = require("../Models/role");
 
-const createCountry = async (req, res) => {
-  try {
-    const { countryname } = req.body;
+// Create Country
+const addCountry = asyncHandler(async (req, res) => {
+    const { name } = req.body;
 
-    const existingCountry = await Country.findOne({ countryname });
-    if (existingCountry) {
-      return res.status(400).json({
-        success: false,
-        message: "Country already exists",
-      });
+    // if (!name) {
+    //     return res.status(200).json({
+    //         Status: 0,
+    //         Message: "Please fill all the fields",
+    //     });
+    // }
+
+    const roleDocs = await Role.find({ _id: { $in: req.user.role } });
+
+    const isSuperAdmin = roleDocs.some(role => role.name === "SuperAdmin");
+
+    if (!isSuperAdmin) {
+        return res.status(200).json({
+            Status: 0,
+            Message: "You are not authorized to add countries",
+        });
     }
 
-    const country = await Country.create({ countryname });
+    const existingCountry = await Country.findOne({ name: new RegExp(`^${name}$`, 'i') });
+    if (existingCountry) {
+        return res.status(200).json({
+            Status: 0,
+            Message: "Country already exists",
+        });
+    }
 
-    res.status(201).json({
-      success: true,
-      data: country,
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-};
+    const country = await Country.create({ name });
 
-/*const getAllCountry = async (req, res) => {
-  try {
-    const countries = await Country.find().sort({ countryname: 1 });
-    res.status(200).json({ success: true, data: countries });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-};*/
-const getAllCountry = async (req, res) => {
-  try {
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
-    const search = req.query.search || "";
+    if (country) {
+        res.status(200).json({
+            Status: 1,
+            Message: "Country added Successfully",
+            country,
+        });
+    } else {
+        res.status(200).json({
+            Status: 0,
+            Message: "Something Went Wrong",
+        });
+    }
+});
 
+// Get All Countries
+const getCountries = asyncHandler(async (req, res) => {
+    const { page, limit, search = "" } = req.query;
     const skip = (page - 1) * limit;
 
-    // Search filter
-    const searchFilter = search
-      ? {
-          countryname: { $regex: search, $options: "i" },
-        }
-      : {};
+    const filter = search
+        ? { name: { $regex: search, $options: 'i' } }
+        : {};
 
-    const totalCount = await Country.countDocuments(searchFilter);
+    const countries = await Country.find(filter)
+            .sort({ name: 1 })
+        .collation({ locale: 'en', strength: 1 })
+        .limit(parseInt(limit))
+        .skip(skip);
 
-    const countries = await Country.find(searchFilter)
-      .sort({ countryname: 1 })
-      .skip(skip)
-      .limit(limit);
+    const count = await Country.countDocuments(filter);
 
-    res.status(200).json({
-      success: true,
-      data: countries,
-      totalCount,
-      currentPage: page,
-      totalPages: Math.ceil(totalCount / limit),
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-};
+    if (countries.length > 0) {
+        res.status(200).json({
+            Status: 1,
+            Message: "Country fetched Successfully",
+            totalCount: count,
+            countries,
+        });
+    } else {
+        res.status(200).json({
+            Status: 0,
+            Message: "No countries found",
+            totalCount: count,
+            countries: [],
+        });
+    }
+});
 
-
-const getCountryById = async (req, res) => {
-  try {
+// Get Single Country by ID
+const getCountryById = asyncHandler(async (req, res) => {
     const country = await Country.findById(req.params.id);
-    if (!country) {
-      return res.status(404).json({
-        success: false,
-        message: "Country not found",
-      });
+
+    if (country) {
+        res.status(200).json({
+            Status: 1,
+            Message: "Country fetched successfully",
+            country,
+        });
+    } else {
+        res.status(200).json({
+            Status: 0,
+            Message: "Country not found",
+        });
     }
-    res.status(200).json({ success: true, data: country });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-};
+});
 
-const updateCountry = async (req, res) => {
-  try {
-    const country = await Country.findByIdAndUpdate(
-      req.params.id,
-      req.body,
-      { new: true }
-    );
+// Update Country
+const updateCountry = asyncHandler(async (req, res) => {
+    const { name } = req.body;
 
-    if (!country) {
-      return res.status(404).json({
-        success: false,
-        message: "Country not found",
-      });
-    }
+    // if (!name) {
+    //     return res.status(200).json({
+    //         Status: 0,
+    //         Message: "Please fill all the fields",
+    //     });
+    // }
 
-    res.status(200).json({ success: true, data: country });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-};
+    const roleDocs = await Role.find({ _id: { $in: req.user.role } });
 
-const deleteCountry = async (req, res) => {
-  try {
-    const country = await Country.findByIdAndDelete(req.params.id);
-    if (!country) {
-      return res.status(404).json({
-        success: false,
-        message: "Country not found",
-      });
+    const isSuperAdmin = roleDocs.some(role => role.name === "SuperAdmin");
+
+    if (!isSuperAdmin) {
+        return res.status(200).json({
+            Status: 0,
+            Message: "You are not authorized to update countries",
+        });
     }
 
-    res.status(200).json({
-      success: true,
-      message: "Country deleted successfully",
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-};
+    const country = await Country.findById(req.params.id);
+
+    if (country) {
+        country.name = name || country.name;
+        await country.save();
+        res.status(200).json({
+            Status: 1,
+            Message: "Country Updated Successfully",
+            country,
+        });
+    } else {
+        res.status(200).json({
+            Status: 0,
+            Message: "Country Not Found",
+        });
+    }
+});
+
+// Delete Country
+const deleteCountry = asyncHandler(async (req, res) => {
+    const roleDocs = await Role.find({ _id: { $in: req.user.role } });
+
+    const isSuperAdmin = roleDocs.some(role => role.name === "SuperAdmin");
+
+    if (!isSuperAdmin) {
+        return res.status(200).json({
+            Status: 0,
+            Message: "You are not authorized to delete countries",
+        });
+    }
+
+    const country = await Country.findById(req.params.id);
+
+    if (country) {
+        await country.deleteOne();
+        res.status(200).json({
+            Status: 1,
+            Message: "Country Deleted Successfully",
+        });
+    } else {
+        res.status(200).json({
+            Status: 0,
+            Message: "Country Not Found",
+        });
+    }
+});
 
 module.exports = {
-  createCountry,
-  getAllCountry,
-  getCountryById,
-  updateCountry,
-  deleteCountry,
+    addCountry,
+    getCountries,
+    getCountryById,
+    updateCountry,
+    deleteCountry,
 };

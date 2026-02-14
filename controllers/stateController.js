@@ -1,176 +1,152 @@
-const Country = require("../models/Country");
-const State = require("../models/State");
+const asyncHandler = require("express-async-handler");
+const State = require("../Models/State");
 
-const createState = async (req, res) => {
-  try {
-    const { statename, country } = req.body;
 
-    if (!statename || !country) {
-      return res.status(400).json({
-        success: false,
-        message: "State name and country are required",
-      });
+// Add State
+const addState = asyncHandler(async (req, res) => {
+    const { name, country } = req.body;
+
+    // if (!name || !country) {
+    //     return res.status(200).json({
+    //         Status: 0,
+    //         Message: "Please fill all the fields",
+    //     });
+    // }
+
+
+    const existing = await State.findOne({ name: new RegExp(`^${name}$`, 'i'), country });
+    if (existing) {
+        return res.status(200).json({
+            Status: 0,
+            Message: "State already exists",
+        });
     }
 
-    const countryExists = await Country.findById(country);
-    if (!countryExists) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid country selected",
-      });
+    // Create & Populate
+    const created = await State.create({ name, country });
+    const populated = await State.findById(created._id).populate("country");
+
+    if (populated) {
+        return res.status(200).json({
+            Status: 1,
+            Message: "State added Successfully",
+            state: populated,
+        });
+    } else {
+        res.status(200).json({
+            Status: 0,
+            Message: "Something went wrong",
+        });
     }
+});
 
-    const state = await State.create({ statename, country });
-
-    res.status(201).json({
-      success: true,
-      message: "State created successfully",
-      data: state,
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-};
-
-// GET STATES BY COUNTRY
-const getStateByCountry = async (req, res) => {
-  try {
-    const { countryId } = req.params;
-
-    const states = await State.find({
-      country: countryId,
-      status: true,
-    })
-      .populate("country", "countryname")
-      .sort({ statename: 1 });
-
-    res.status(200).json({
-      success: true,
-      data: states,
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-};
-
-/*const getAllState = async (req, res) => {
-  try {
-    const states = await State.find({ status: true })
-      .populate("country", "countryname")
-      .sort({ statename: 1 });
-
-    res.status(200).json({
-      success: true,
-      data: states,
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-};*/
-const getAllState = async (req, res) => {
-  try {
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
-    const search = req.query.search || "";
-
+// Get All States
+const getStates = asyncHandler(async (req, res) => {
+    const { page, limit, search = "", countryId } = req.query;
     const skip = (page - 1) * limit;
 
-    const searchFilter = {
-      status: true,
-      ...(search && {
-        statename: { $regex: search, $options: "i" },
-      }),
-    };
+    const filter = {};
 
-    const totalCount = await State.countDocuments(searchFilter);
+    if (search) {
+        filter.name = { $regex: search, $options: "i" };
+    }
 
-    const states = await State.find(searchFilter)
-      .populate("country", "countryname")
-      .sort({ statename: 1 })
-      .skip(skip)
-      .limit(limit);
+    if (countryId) {
+        filter.country = (countryId);
+    }
+
+    const list = await State.find(filter)
+        .populate("country")
+        .sort({ name: 1 })
+        .collation({ locale: 'en', strength: 1 })
+        .limit(limit)
+        .skip(skip);
+
+    const count = await State.countDocuments(filter);
 
     res.status(200).json({
-      success: true,
-      data: states,
-      totalCount,
-      currentPage: page,
-      totalPages: Math.ceil(totalCount / limit),
+        Status: 1,
+        Message: list.length > 0 ? "States fetched successfully" : "No States found",
+        totalCount: count,
+        states: list,
     });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-};
+});
 
+// Get Single State by ID
+const getStateById = asyncHandler(async (req, res) => {
+    const state = await State.findById(req.params.id).populate("country");
 
-const updateState = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { statename, country } = req.body;
-
-    if (country) {
-      const countryExists = await Country.findById(country);
-      if (!countryExists) {
-        return res.status(400).json({
-          success: false,
-          message: "Invalid country selected",
+    if (state) {
+        res.status(200).json({
+            Status: 1,
+            Message: "State fetched successfully",
+            state,
         });
-      }
+    } else {
+        res.status(200).json({
+            Status: 0,
+            Message: "State not found",
+        });
+    }
+});
+
+// Update State
+const updateState = asyncHandler(async (req, res) => {
+    const { name, country } = req.body;
+
+    if (!name || !country) {
+        return res.status(200).json({
+            Status: 0,
+            Message: "Please fill all the fields",
+        });
     }
 
-    const updatedState = await State.findByIdAndUpdate(
-      id,
-      { statename, country },
-      { new: true, runValidators: true }
-    ).populate("country", "countryname");
 
-    if (!updatedState) {
-      return res.status(404).json({
-        success: false,
-        message: "State not found",
-      });
+    const state = await State.findById(req.params.id);
+
+    if (state) {
+        state.name = name || state.name;
+        state.country = country || state.country;
+        await state.save();
+
+        const populatedState = await State.findById(state._id).populate("country");
+
+        res.status(200).json({
+            Status: 1,
+            Message: "State updated successfully",
+            state: populatedState,
+        });
+    } else {
+        res.status(200).json({
+            Status: 0,
+            Message: "State not found",
+        });
     }
+});
 
-    res.status(200).json({
-      success: true,
-      message: "State updated successfully",
-      data: updatedState,
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-};
+// Delete State
+const deleteState = asyncHandler(async (req, res) => {
 
-const deleteState = async (req, res) => {
-  try {
-    const { id } = req.params;
+    const state = await State.findById(req.params.id);
 
-    const state = await State.findByIdAndUpdate(
-      id,
-      { status: false },
-      { new: true }
-    );
-
-    if (!state) {
-      return res.status(404).json({
-        success: false,
-        message: "State not found",
-      });
+    if (state) {
+        await state.deleteOne();
+        res.status(200).json({
+            Status: 1,
+            Message: "State deleted successfully",
+        });
+    } else {
+        res.status(200).json({
+            Status: 0,
+            Message: "State not found",
+        });
     }
-
-    res.status(200).json({
-      success: true,
-      message: "State disabled successfully",
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-};
+});
 
 module.exports = {
-  createState,
-  getStateByCountry,
-  getAllState,
-  updateState,
-  deleteState,
+    addState,
+    getStates,
+    getStateById,
+    updateState,
+    deleteState,
 };

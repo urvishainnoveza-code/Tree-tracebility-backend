@@ -1,128 +1,205 @@
-const State = require("../models/State");
-const City = require("../models/City");
+const asyncHandler = require("express-async-handler");
+const City = require("../Models/City");
+const Role = require("../Models/role");
 
-const createCity = async (req, res) => {
-  try {
-    const { cityname, state } = req.body;
+// Add City
+const addCity = asyncHandler(async (req, res) => {
+    const { name, country, state } = req.body;
 
-    const stateExists = await State.findById(state);
-    if (!stateExists) return res.status(400).json({ success: false, message: "Invalid state selected" });
-
-    const city = await City.create({ cityname, state });
-
-    res.status(201).json({ success: true, message: "City created successfully", data: city });
-  } catch (error) {
-    if (error.code === 11000) return res.status(400).json({ success: false, message: "City already exists in this state" });
-    res.status(500).json({ success: false, message: error.message });
-  }
-};
-
-/*const getAllCities = async (req, res) => {
-  try {
-    const cities = await City.find({ status: true })
-      .populate({
-        path: "state",
-        match: { status: true },
-        select: "statename country",
-        populate: { path: "country", match: { status: true }, select: "countryname" },
-      })
-      .sort({ cityname: 1 });
-
-    const filteredCities = cities.filter(city => city.state !== null);
-
-    res.status(200).json({ success: true, data: filteredCities });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-};*/
-const getAllCities = async (req, res) => {
-  try {
-    const { page = 1, limit = 10, search = "" } = req.query;
-
-    const query = {
-      status: true,
-      cityname: { $regex: search, $options: "i" },
-    };
-
-    const total = await City.countDocuments(query);
-
-    const cities = await City.find(query)
-      .populate({
-        path: "state",
-        match: { status: true },
-        select: "statename country",
-        populate: {
-          path: "country",
-          match: { status: true },
-          select: "countryname",
-        },
-      })
-      .sort({ cityname: 1 })
-      .skip((page - 1) * limit)
-      .limit(parseInt(limit));
-
-    const filteredCities = cities.filter((city) => city.state !== null);
-
-    res.status(200).json({
-      success: true,
-      data: filteredCities,
-      totalPages: Math.ceil(total / limit),
-      currentPage: Number(page),
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-};
-
-
-const getCitiesByState = async (req, res) => {
-  try {
-    const { stateId } = req.params;
-
-    const cities = await City.find({ state: stateId, status: true })
-      .populate({
-        path: "state",
-        select: "statename country",
-        populate: { path: "country", select: "countryname" },
-      })
-      .sort({ cityname: 1 });
-
-    res.status(200).json({ success: true, data: cities });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-};
-
-const updateCity = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { cityname, state, status } = req.body;
-
-    if (state) {
-      const stateExists = await State.findById(state);
-      if (!stateExists) return res.status(400).json({ success: false, message: "Invalid state selected" });
+    if (!name || !country || !state) {
+        return res.status(200).json({
+            Status: 0,
+            Message: "Please fill all the fields",
+        });
     }
 
-    const updatedCity = await City.findByIdAndUpdate(id, { cityname, state, status }, { new: true, runValidators: true });
-    if (!updatedCity) return res.status(404).json({ success: false, message: "City not found" });
+ const roleDocs = await Role.find({ _id: { $in: req.user.role } });
+    const isSuperAdmin = roleDocs.some(role => role.name === "SuperAdmin");
 
-    res.status(200).json({ success: true, message: "City updated successfully", data: updatedCity });
-  } catch (error) {
-    if (error.code === 11000) return res.status(400).json({ success: false, message: "City already exists in this state" });
-    res.status(500).json({ success: false, message: error.message });
-  }
+    if (!isSuperAdmin) {
+        return res.status(200).json({
+            Status: 0,
+            Message: "You are not authorized to add cities",
+        });
+    }
+
+    const existing = await City.findOne({ name: new RegExp(`^${name}$`, 'i'), country, state });
+    if (existing) {
+        return res.status(200).json({
+            Status: 0,
+            Message: "City already exists",
+        });
+    }
+
+    const created = await City.create({ name, country, state });
+    if (created) {
+        const populatedCity = await City.findById(created._id)
+            .populate({ path: 'country' })
+            .populate({
+                path: 'state',
+                populate: { path: 'country' }
+            });
+
+        res.status(200).json({
+            Status: 1,
+            Message: "City added Successfully",
+            city: populatedCity,
+        });
+    } else {
+        res.status(200).json({
+            Status: 0,
+            Message: "Something went wrong",
+        });
+    }
+});
+
+// Get All Cities with Pagination
+const getCities = asyncHandler(async (req, res) => {
+    const { page, limit, search = "", countryId, stateId } = req.query;
+    const skip = (page - 1) * limit;
+
+    const filter = {};
+
+    if (search) {
+        filter.name = { $regex: search, $options: "i" };
+    }
+
+    if (countryId) {
+        filter.country = (countryId);
+    }
+
+    if (stateId) {
+        filter.state = (stateId);
+    }
+
+    const list = await City.find(filter)
+        .populate({ path: 'country' })
+        .populate({
+            path: 'state',
+            populate: { path: 'country' }
+        })
+        // Sort alphabetically by name (case-insensitive)
+        .sort({ name: 1 })
+        .collation({ locale: 'en', strength: 1 })
+        .limit(limit)
+        .skip(skip);
+
+    const count = await City.countDocuments(filter);
+
+    res.status(200).json({
+        Status: 1,
+        Message: list.length > 0 ? "Cities fetched successfully" : "No cities found",
+        totalCount: count,
+        cities: list,
+    });
+});
+
+// Get Single City by ID
+const getCityById = asyncHandler(async (req, res) => {
+    const city = await City.findById(req.params.id)
+        .populate({ path: 'country' })
+        .populate({
+            path: 'state',
+            populate: { path: 'country' }
+        })
+
+
+    if (city) {
+        res.status(200).json({
+            Status: 1,
+            Message: "City fetched successfully",
+            city,
+        });
+    } else {
+        res.status(200).json({
+            Status: 0,
+            Message: "City not found",
+        });
+    }
+});
+
+// Update City
+const updateCity = asyncHandler(async (req, res) => {
+    const { name, country, state } = req.body;
+
+    // if (!name || !country || !state) {
+    //     return res.status(200).json({
+    //         Status: 0,
+    //         Message: "Please fill all the fields",
+    //     });
+    // }
+
+    const roleDocs = await Role.find({ _id: { $in: req.user.role } });
+    const isSuperAdmin = roleDocs.some(role => role.name === "SuperAdmin");
+
+    if (!isSuperAdmin) {
+        return res.status(200).json({
+            Status: 0,
+            Message: "You are not authorized to update cities",
+        });
+    }
+
+    const city = await City.findById(req.params.id);
+
+    if (city) {
+        city.name = name || city.name;
+        city.country = country || city.country;
+        city.state = state || city.state;
+        await city.save();
+
+        const populatedCity = await City.findById(city._id)
+            .populate({ path: 'country' })
+            .populate({
+                path: 'state',
+                populate: { path: 'country' }
+            })
+
+
+        res.status(200).json({
+            Status: 1,
+            Message: "City updated successfully",
+            city: populatedCity,
+        });
+    } else {
+        res.status(200).json({
+            Status: 0,
+            Message: "City not found",
+        });
+    }
+});
+
+// Delete City
+const deleteCity = asyncHandler(async (req, res) => {
+    const roleDocs = await Role.find({ _id: { $in: req.user.role } });
+    const isSuperAdmin = roleDocs.some(role => role.name === "SuperAdmin");
+
+    if (!isSuperAdmin) {
+        return res.status(200).json({
+            Status: 0,
+            Message: "You are not authorized to delete cities",
+        });
+    }
+
+    const city = await City.findById(req.params.id);
+
+    if (city) {
+        await city.deleteOne();
+        res.status(200).json({
+            Status: 1,
+            Message: "City deleted successfully",
+        });
+    } else {
+        res.status(200).json({
+            Status: 0,
+            Message: "City not found",
+        });
+    }
+});
+
+module.exports = {
+    addCity,
+    getCities,
+    getCityById,
+    updateCity,
+    deleteCity,
 };
-
-const deleteCity = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const city = await City.findByIdAndUpdate(id, { status: false }, { new: true });
-    if (!city) return res.status(404).json({ success: false, message: "City not found" });
-
-    res.status(200).json({ success: true, message: "City disabled successfully" });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-};
-
-module.exports = { createCity, getAllCities, getCitiesByState, updateCity, deleteCity };

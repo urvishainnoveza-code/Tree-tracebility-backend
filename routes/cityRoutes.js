@@ -1,11 +1,18 @@
 const express = require("express");
 const router = express.Router();
-const { createCity, getAllCities, getCitiesByState, updateCity, deleteCity } = require("../controllers/cityController");
+const { protect } = require('../middleware/auth');
+const {
+  addCity,
+  getCities,
+  getCityById,
+  updateCity,
+  deleteCity
+} = require("../Controllers/cityController");
 
-router.post("/", createCity);
-router.get("/", getAllCities);
-router.get("/state/:stateId", getCitiesByState);
-router.put("/:id", updateCity);
-router.delete("/:id", deleteCity);
+router.post("/", protect, addCity);
+router.get("/", protect, getCities);
+router.get("/:id", protect, getCityById);
+router.put("/:id", protect, updateCity);
+router.delete("/:id", protect, deleteCity);
 
 module.exports = router;

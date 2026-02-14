@@ -1,31 +1,18 @@
-/*import express from "express";
-import { createCountry ,getAllCountry,getCountryById,updateCountry,deleteCountry} from "../controllers/countryController.js";
-
-const router = express.Router();
-
-router.post("/", createCountry);
-router.get("/", getAllCountry);
-router.get("/:id", getCountryById);
-router.put("/:id", updateCountry);
-router.delete("/:id", deleteCountry);
-
-export default router;*/
-
 const express = require("express");
 const router = express.Router();
-
+const { protect } = require('../middleware/auth');
 const {
-  createCountry,
-  getAllCountry,
-  getCountryById,
-  updateCountry,
-  deleteCountry,
-} = require("../controllers/countryController");
+    addCountry,
+    getCountries,
+    getCountryById,
+    updateCountry,
+    deleteCountry
+} = require("../Controllers/countryController");
 
-router.post("/", createCountry);
-router.get("/", getAllCountry);
-router.get("/:id", getCountryById);
-router.put("/:id", updateCountry);
-router.delete("/:id", deleteCountry);
+router.post("/", protect, addCountry);
+router.get("/", protect, getCountries);
+router.get("/:id", protect, getCountryById);
+router.put("/:id", protect, updateCountry);
+router.delete("/:id", protect, deleteCountry);
 
 module.exports = router;
