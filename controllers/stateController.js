@@ -1,17 +1,9 @@
 const asyncHandler = require("express-async-handler");
-const State = require("../Models/State");
+const State = require("../models/State.js");
 
 
-// Add State
 const addState = asyncHandler(async (req, res) => {
     const { name, country } = req.body;
-
-    // if (!name || !country) {
-    //     return res.status(200).json({
-    //         Status: 0,
-    //         Message: "Please fill all the fields",
-    //     });
-    // }
 
 
     const existing = await State.findOne({ name: new RegExp(`^${name}$`, 'i'), country });

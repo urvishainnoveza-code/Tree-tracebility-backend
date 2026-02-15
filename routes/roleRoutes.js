@@ -1,24 +1,25 @@
 const express = require("express");
 const router = express.Router();
-const { protect } = require('../middleware/auth');
 
-const {
-    addRole,
-    getRoles,
-    getRoleById,
-    updateRole,
-    deleteRole,
-    getAllRoles
-} = require("../Controllers/roleController");
+let RoleModel;
+try {
+  RoleModel = require("../models/Role.js");
+} catch (e) {
+  console.warn("Warning: failed to load Role model:", e.message);
+}
 
+router.get("/", async (req, res) => {
+  if (!RoleModel)
+    return res.status(200).json({ Status: 0, Message: "Roles unavailable" });
+  const roles = await RoleModel.find();
+  res.json({ Status: 1, roles });
+});
 
-router.post("/", protect, addRole);
-// Save multiple responsibilities for a rol
-router.get("/", getRoles);
-router.get("/all", getAllRoles);
-router.get("/:id", protect, getRoleById);
-router.put("/:id", protect, updateRole);
-router.delete("/:id", protect, deleteRole);
-
+router.post("/", async (req, res) => {
+  if (!RoleModel)
+    return res.status(200).json({ Status: 0, Message: "Roles unavailable" });
+  const role = await RoleModel.create(req.body);
+  res.json({ Status: 1, role });
+});
 
 module.exports = router;

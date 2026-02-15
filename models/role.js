@@ -1,58 +1,31 @@
 const mongoose = require("mongoose");
 
-const roleSchema = new mongoose.Schema({
-  name: { type: String, required: true, }, // e.g., "Manager"
-  description: String,
-  default: { type: Boolean, default: false },
-  addedby: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "User"
-  },
-  permissionGroups: [
-    {
-      group: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'PermissionGroup',
-      },
-      permissions: [
-        {
-          permission: {
-            type: mongoose.Schema.Types.ObjectId,
-            ref: 'Permission',
-          },
-          allowedActions: [
-            {
-              type: mongoose.Schema.Types.ObjectId,
-              ref: 'Action',
-            },
-          ],
-        },
-      ],
+const roleSchema = new mongoose.Schema(
+  {
+    name: { type: String, required: true },
+    description: String,
+    default: { type: Boolean, default: false },
+    addedby: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
     },
-  ],
-});
+  },
+  {
+    timestamps: true,
+  },
+);
 
-// autopopulate nested permissionGroups -> group, permissions.permission, permissions.allowedActions
-function autoPopulateRole() {
+function autoPopulateRole(next) {
   if (this.options && this.options.skipUserAutoPopulate) {
-    return;
+    return next();
   }
-  this.populate({
-    path: 'permissionGroups.group',
-    select: 'name',
-  });
-  this.populate({
-    path: 'permissionGroups.permissions.permission',
-    select: 'name',
-  });
-  this.populate({
-    path: 'permissionGroups.permissions.allowedActions',
-    select: 'name',
-  });
+
+  this.populate({ path: "addedby", select: "firstName lastName email" });
+
+  next();
 }
 
 roleSchema.pre(/^find/, autoPopulateRole);
 
+module.exports = mongoose.model("Role", roleSchema);
 
-
-module.exports = mongoose.models.Role || mongoose.model("Role", roleSchema);

@@ -1,6 +1,6 @@
 const asyncHandler = require("express-async-handler");
-const City = require("../Models/City");
-const Role = require("../Models/role");
+const City = require("../models/City");
+const Role = require("../models/Role");
 
 // Add City
 const addCity = asyncHandler(async (req, res) => {
