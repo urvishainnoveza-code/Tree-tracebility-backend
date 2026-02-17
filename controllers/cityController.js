@@ -1,205 +1,197 @@
-const asyncHandler = require("express-async-handler");
+const mongoose = require("mongoose");
+
+
+//  Add State
 const City = require("../models/City");
-const Role = require("../models/Role");
 
 // Add City
-const addCity = asyncHandler(async (req, res) => {
+const addCity = async (req, res) => {
+  try {
     const { name, country, state } = req.body;
 
     if (!name || !country || !state) {
-        return res.status(200).json({
-            Status: 0,
-            Message: "Please fill all the fields",
-        });
+      return res.status(400).json({
+        Status: 0,
+        Message: "Name, country and state are required",
+      });
     }
 
- const roleDocs = await Role.find({ _id: { $in: req.user.role } });
-    const isSuperAdmin = roleDocs.some(role => role.name === "SuperAdmin");
+    const existing = await City.findOne({
+      name: new RegExp(`^${name}$`, "i"),
+      country,
+      state,
+    });
 
-    if (!isSuperAdmin) {
-        return res.status(200).json({
-            Status: 0,
-            Message: "You are not authorized to add cities",
-        });
-    }
-
-    const existing = await City.findOne({ name: new RegExp(`^${name}$`, 'i'), country, state });
     if (existing) {
-        return res.status(200).json({
-            Status: 0,
-            Message: "City already exists",
-        });
+      return res.status(400).json({
+        Status: 0,
+        Message: "City already exists",
+      });
     }
 
     const created = await City.create({ name, country, state });
-    if (created) {
-        const populatedCity = await City.findById(created._id)
-            .populate({ path: 'country' })
-            .populate({
-                path: 'state',
-                populate: { path: 'country' }
-            });
 
-        res.status(200).json({
-            Status: 1,
-            Message: "City added Successfully",
-            city: populatedCity,
-        });
-    } else {
-        res.status(200).json({
-            Status: 0,
-            Message: "Something went wrong",
-        });
-    }
-});
+    const populatedCity = await City.findById(created._id)
+      .populate("country", "name")
+      .populate("state", "name");
 
-// Get All Cities with Pagination
-const getCities = asyncHandler(async (req, res) => {
-    const { page, limit, search = "", countryId, stateId } = req.query;
-    const skip = (page - 1) * limit;
+    return res.status(201).json({
+      Status: 1,
+      Message: "City added successfully",
+      city: populatedCity,
+    });
+  } catch (error) {
+    console.error("Add City Error:", error);
+    return res.status(500).json({
+      Status: 0,
+      Message: "Internal Server Error",
+    });
+  }
+};
+
+
+// Get All Cities
+const getAllCities = async (req, res) => {
+  try {
+    const { page = 1, limit = 10, search = "", country, state } = req.query;
+
+    const pageNum = parseInt(page, 10) || 1;
+    const limitNum = parseInt(limit, 10) || 10;
+    const skip = (pageNum - 1) * limitNum;
 
     const filter = {};
 
     if (search) {
-        filter.name = { $regex: search, $options: "i" };
+      filter.name = { $regex: search, $options: "i" };
     }
 
-    if (countryId) {
-        filter.country = (countryId);
+    if (country) {
+      filter.country = country;
     }
 
-    if (stateId) {
-        filter.state = (stateId);
+    if (state) {
+      filter.state = state;
     }
+const list = await City.find(filter)
+      .populate("country")
+      .populate("state")
 
-    const list = await City.find(filter)
-        .populate({ path: 'country' })
-        .populate({
-            path: 'state',
-            populate: { path: 'country' }
-        })
-        // Sort alphabetically by name (case-insensitive)
-        .sort({ name: 1 })
-        .collation({ locale: 'en', strength: 1 })
-        .limit(limit)
-        .skip(skip);
+      .sort({ name: 1 })
+      .collation({ locale: "en", strength: 1 })
+      .limit(limitNum)
+      .skip(skip);
 
     const count = await City.countDocuments(filter);
 
-    res.status(200).json({
-        Status: 1,
-        Message: list.length > 0 ? "Cities fetched successfully" : "No cities found",
-        totalCount: count,
-        cities: list,
+    return res.status(200).json({
+      Status: 1,
+      Message: "Cities fetched successfully",
+      totalCount: count,
+      cities: list,
     });
-});
+  } catch (error) {
+    console.error("Get All Cities Error:", error);
+    return res.status(500).json({
+      Status: 0,
+      Message: "Internal Server Error",
+    });
+  }
+};
 
-// Get Single City by ID
-const getCityById = asyncHandler(async (req, res) => {
-    const city = await City.findById(req.params.id)
-        .populate({ path: 'country' })
-        .populate({
-            path: 'state',
-            populate: { path: 'country' }
-        })
+// Get City By ID
+const getCityById = async (req, res) => {
+  try {
+    const city = await City.findById(req.params.id).populate("country").populate("state");
 
-
-    if (city) {
-        res.status(200).json({
-            Status: 1,
-            Message: "City fetched successfully",
-            city,
-        });
-    } else {
-        res.status(200).json({
-            Status: 0,
-            Message: "City not found",
-        });
+    if (!city) {
+      return res.status(404).json({
+        Status: 0,
+        Message: "City not found",
+      });
     }
-});
+
+    return res.status(200).json({
+      Status: 1,
+      Message: "City fetched successfully",
+      city,
+
+    });
+  } catch (error) {
+    console.error("Get State By ID Error:", error);
+    return res.status(500).json({
+      Status: 0,
+      Message: "Internal Server Error",
+    });
+  }
+};
 
 // Update City
-const updateCity = asyncHandler(async (req, res) => {
+const updateCity = async (req, res) => {
+  try {
     const { name, country, state } = req.body;
 
-    // if (!name || !country || !state) {
-    //     return res.status(200).json({
-    //         Status: 0,
-    //         Message: "Please fill all the fields",
-    //     });
-    // }
-
-    const roleDocs = await Role.find({ _id: { $in: req.user.role } });
-    const isSuperAdmin = roleDocs.some(role => role.name === "SuperAdmin");
-
-    if (!isSuperAdmin) {
-        return res.status(200).json({
-            Status: 0,
-            Message: "You are not authorized to update cities",
-        });
-    }
-
     const city = await City.findById(req.params.id);
 
-    if (city) {
-        city.name = name || city.name;
-        city.country = country || city.country;
-        city.state = state || city.state;
-        await city.save();
-
-        const populatedCity = await City.findById(city._id)
-            .populate({ path: 'country' })
-            .populate({
-                path: 'state',
-                populate: { path: 'country' }
-            })
-
-
-        res.status(200).json({
-            Status: 1,
-            Message: "City updated successfully",
-            city: populatedCity,
-        });
-    } else {
-        res.status(200).json({
-            Status: 0,
-            Message: "City not found",
-        });
+    if (!city) {
+      return res.status(404).json({
+        Status: 0,
+        Message: "City not found",
+      });
     }
-});
+city.name = name || city.name;
+    city.country = country || city.country;
+    city.state = state || city.state;
+  
 
-// Delete City
-const deleteCity = asyncHandler(async (req, res) => {
-    const roleDocs = await Role.find({ _id: { $in: req.user.role } });
-    const isSuperAdmin = roleDocs.some(role => role.name === "SuperAdmin");
+    await city.save();
 
-    if (!isSuperAdmin) {
-        return res.status(200).json({
-            Status: 0,
-            Message: "You are not authorized to delete cities",
-        });
-    }
+    const populatedCity = await City.findById(city._id).populate("country").populate("state");
 
+    return res.status(200).json({
+      Status: 1,
+      Message: "City updated successfully",
+      city: populatedCity,
+    });
+  } catch (error) {
+    console.error("Update City Error:", error);
+    return res.status(500).json({
+      Status: 0,
+      Message: "Internal Server Error",
+    });
+  }
+};
+
+//  Delete City
+const deleteCity = async (req, res) => {
+  try {
     const city = await City.findById(req.params.id);
 
-    if (city) {
-        await city.deleteOne();
-        res.status(200).json({
-            Status: 1,
-            Message: "City deleted successfully",
-        });
-    } else {
-        res.status(200).json({
-            Status: 0,
-            Message: "City not found",
-        });
+    if (!city) {
+      return res.status(404).json({
+        Status: 0,
+        Message: "City not found",
+      });
     }
-});
+
+    await city.deleteOne();
+
+    return res.status(200).json({
+      Status: 1,
+      Message: "City deleted successfully",
+    });
+  } catch (error) {
+    console.error("Delete City Error:", error);
+    return res.status(500).json({
+      Status: 0,
+      Message: "Internal Server Error",
+    });
+  }
+};
 
 module.exports = {
-    addCity,
-    getCities,
-    getCityById,
-    updateCity,
-    deleteCity,
+  addCity,
+  getAllCities,
+  getCityById,
+  updateCity,
+  deleteCity,
 };

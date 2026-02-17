@@ -1,144 +1,192 @@
-const asyncHandler = require("express-async-handler");
-const State = require("../models/State.js");
+const State = require("../models/State");
+const mongoose = require("mongoose");
 
-
-const addState = asyncHandler(async (req, res) => {
+//  Add State
+const addState = async (req, res) => {
+  try {
     const { name, country } = req.body;
 
+    if (!name || !country) {
+      return res.status(400).json({
+        Status: 0,
+        Message: "Name and country are required",
+      });
+    }
 
-    const existing = await State.findOne({ name: new RegExp(`^${name}$`, 'i'), country });
+    const existing = await State.findOne({
+      name: new RegExp(`^${name}$`, "i"),
+      country,
+    });
+
     if (existing) {
-        return res.status(200).json({
-            Status: 0,
-            Message: "State already exists",
-        });
+      return res.status(200).json({
+        Status: 0,
+        Message: "State already exists",
+      });
     }
 
-    // Create & Populate
     const created = await State.create({ name, country });
-    const populated = await State.findById(created._id).populate("country");
 
-    if (populated) {
-        return res.status(200).json({
-            Status: 1,
-            Message: "State added Successfully",
-            state: populated,
-        });
-    } else {
-        res.status(200).json({
-            Status: 0,
-            Message: "Something went wrong",
-        });
+    if (!created) {
+      return res.status(500).json({
+        Status: 0,
+        Message: "Something went wrong",
+      });
     }
-});
+
+    const populatedState = await State.findById(created._id).populate(
+      "country",
+    );
+
+    return res.status(201).json({
+      Status: 1,
+      Message: "State added successfully",
+      state: populatedState,
+    });
+  } catch (error) {
+    console.error("Add State Error:", error);
+    return res.status(500).json({
+      Status: 0,
+      Message: "Internal Server Error",
+    });
+  }
+};
 
 // Get All States
-const getStates = asyncHandler(async (req, res) => {
-    const { page, limit, search = "", countryId } = req.query;
-    const skip = (page - 1) * limit;
+const getAllState = async (req, res) => {
+  try {
+    const { page = 1, limit = 10, search = "", country } = req.query;
+
+    const pageNum = parseInt(page, 10) || 1;
+    const limitNum = parseInt(limit, 10) || 10;
+    const skip = (pageNum - 1) * limitNum;
 
     const filter = {};
 
     if (search) {
-        filter.name = { $regex: search, $options: "i" };
+      filter.name = { $regex: search, $options: "i" };
     }
 
-    if (countryId) {
-        filter.country = (countryId);
+    if (country) {
+      filter.country = country;
     }
 
     const list = await State.find(filter)
-        .populate("country")
-        .sort({ name: 1 })
-        .collation({ locale: 'en', strength: 1 })
-        .limit(limit)
-        .skip(skip);
+      .populate("country")
+      .sort({ name: 1 })
+      .collation({ locale: "en", strength: 1 })
+      .limit(limitNum)
+      .skip(skip);
 
     const count = await State.countDocuments(filter);
 
-    res.status(200).json({
-        Status: 1,
-        Message: list.length > 0 ? "States fetched successfully" : "No States found",
-        totalCount: count,
-        states: list,
+    return res.status(200).json({
+      Status: 1,
+      Message: "States fetched successfully",
+      totalCount: count,
+      states: list,
     });
-});
+  } catch (error) {
+    console.error("Get All States Error:", error);
+    return res.status(500).json({
+      Status: 0,
+      Message: "Internal Server Error",
+    });
+  }
+};
 
-// Get Single State by ID
-const getStateById = asyncHandler(async (req, res) => {
+// Get State By ID
+const getStateById = async (req, res) => {
+  try {
     const state = await State.findById(req.params.id).populate("country");
 
-    if (state) {
-        res.status(200).json({
-            Status: 1,
-            Message: "State fetched successfully",
-            state,
-        });
-    } else {
-        res.status(200).json({
-            Status: 0,
-            Message: "State not found",
-        });
+    if (!state) {
+      return res.status(404).json({
+        Status: 0,
+        Message: "State not found",
+      });
     }
-});
+
+    return res.status(200).json({
+      Status: 1,
+      Message: "State fetched successfully",
+      state,
+    });
+  } catch (error) {
+    console.error("Get State By ID Error:", error);
+    return res.status(500).json({
+      Status: 0,
+      Message: "Internal Server Error",
+    });
+  }
+};
 
 // Update State
-const updateState = asyncHandler(async (req, res) => {
+const updateState = async (req, res) => {
+  try {
     const { name, country } = req.body;
 
-    if (!name || !country) {
-        return res.status(200).json({
-            Status: 0,
-            Message: "Please fill all the fields",
-        });
-    }
-
-
     const state = await State.findById(req.params.id);
 
-    if (state) {
-        state.name = name || state.name;
-        state.country = country || state.country;
-        await state.save();
-
-        const populatedState = await State.findById(state._id).populate("country");
-
-        res.status(200).json({
-            Status: 1,
-            Message: "State updated successfully",
-            state: populatedState,
-        });
-    } else {
-        res.status(200).json({
-            Status: 0,
-            Message: "State not found",
-        });
+    if (!state) {
+      return res.status(404).json({
+        Status: 0,
+        Message: "State not found",
+      });
     }
-});
 
-// Delete State
-const deleteState = asyncHandler(async (req, res) => {
+    state.name = name || state.name;
+    state.country = country || state.country;
 
+    await state.save();
+
+    const populatedState = await State.findById(state._id).populate("country");
+
+    return res.status(200).json({
+      Status: 1,
+      Message: "State updated successfully",
+      state: populatedState,
+    });
+  } catch (error) {
+    console.error("Update State Error:", error);
+    return res.status(500).json({
+      Status: 0,
+      Message: "Internal Server Error",
+    });
+  }
+};
+
+//  Delete State
+const deleteState = async (req, res) => {
+  try {
     const state = await State.findById(req.params.id);
 
-    if (state) {
-        await state.deleteOne();
-        res.status(200).json({
-            Status: 1,
-            Message: "State deleted successfully",
-        });
-    } else {
-        res.status(200).json({
-            Status: 0,
-            Message: "State not found",
-        });
+    if (!state) {
+      return res.status(404).json({
+        Status: 0,
+        Message: "State not found",
+      });
     }
-});
+
+    await state.deleteOne();
+
+    return res.status(200).json({
+      Status: 1,
+      Message: "State deleted successfully",
+    });
+  } catch (error) {
+    console.error("Delete State Error:", error);
+    return res.status(500).json({
+      Status: 0,
+      Message: "Internal Server Error",
+    });
+  }
+};
 
 module.exports = {
-    addState,
-    getStates,
-    getStateById,
-    updateState,
-    deleteState,
+  addState,
+  getAllState,
+  getStateById,
+  updateState,
+  deleteState,
 };

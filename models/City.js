@@ -11,24 +11,37 @@ const citySchema = new mongoose.Schema({
 }, { timestamps: true });
 
 
-citySchema.pre(/^find/, async function(next) {
-    
-    const Model = mongoose.models['City'];
-    const StateModel = mongoose.models['State'];
-    const CountryModel = mongoose.models['Country'];
+citySchema.pre(/^find/, async function () {
+  try {
+    const Model = mongoose.models["City"];
+    const StateModel = mongoose.models["State"];
+    const CountryModel = mongoose.models["Country"];
+
     const count = await Model.countDocuments();
+
     if (count === 0) {
-      await CountryModel.findOne({ default: true }).then(async (country) => {
-        await StateModel.findOne({ default: true }).then(async (state) => {
-          await Model.insertMany([
-            { name: "Ahmedabad", country: country._id, state: state._id ,default: true},
-          ]);
-          console.log(' Default City via pre-find hook.');
-        });
-      });
-}
-    next();
+      const country = await CountryModel.findOne({ default: true });
+      const state = await StateModel.findOne({ default: true });
+
+      if (!country || !state) {
+        console.log("⚠ Default country or state not found. Skipping city seed.");
+        return;
+      }
+
+      await Model.insertMany([
+        {
+          name: "Ahmedabad",
+          country: country._id,
+          state: state._id,
+          default: true,
+        },
+      ]);
+
+      console.log("Default City via pre-find hook.");
+    }
+  } catch (error) {
+    console.error("City pre-find error:", error);
+  }
 });
 
-
-module.exports = mongoose.models.City || mongoose.model("City", citySchema);
+module.exports = mongoose.model("City", citySchema);

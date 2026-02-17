@@ -1,45 +1,50 @@
-/*const jwt = require("jsonwebtoken");
+const jwt = require("jsonwebtoken");
 const asyncHandler = require("express-async-handler");
 const User = require("../models/User");
 
 const protect = asyncHandler(async (req, res, next) => {
   let token;
 
-  if (req.headers.authorization?.startsWith("Bearer")) {
-    token = req.headers.authorization.split(" ")[1];
+  if (req.headers.authorization) {
+    try {
+      if (req.headers.authorization.startsWith("Bearer ")) {
+        token = req.headers.authorization.split(" ")[1];
+      } else {
+        token = req.headers.authorization;
+      }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-    req.user = await User.findById(decoded.id);
+      const user = await User.findById(decoded.id);
 
-    if (!req.user) {
-      return res.status(401).json({ message: "User not found" });
+      if (!user) {
+        return res.status(401).json({ error: "User not found" });
+      }
+
+      req.userId = user._id;
+      req.user = user;
+
+      next();
+    } catch (error) {
+      return res.status(401).json({ error: "Not authorized" });
+    }
+  }
+
+  if (!token) {
+    return res.status(401).json({ error: "Token not provided" });
+  }
+});
+
+const authorizeRoles = (...roles) => {
+  return async (req, res, next) => {
+    const user = await User.findById(req.userId).populate("role");
+
+    if (!roles.includes(user.role.name)) {
+      return res.status(403).json({ error: "Access denied" });
     }
 
     next();
-  } else {
-    return res.status(401).json({ message: "Not authorized" });
-  }
-});
+  };
+};
 
-module.exports = protect;*/const jwt = require("jsonwebtoken");
-const asyncHandler = require("express-async-handler");
-const User = require("../models/User");
-
-const protect = asyncHandler(async (req, res, next) => {
-  if (!req.headers.authorization?.startsWith("Bearer")) {
-    return res.status(401).json({ message: "Not authorized" });
-  }
-
-  const token = req.headers.authorization.split(" ")[1];
-  const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
-  req.user = await User.findById(decoded.id);
-  if (!req.user) {
-    return res.status(401).json({ message: "User not found" });
-  }
-
-  next();
-});
-
-module.exports = protect;
+module.exports = { protect, authorizeRoles };

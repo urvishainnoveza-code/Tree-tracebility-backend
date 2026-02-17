@@ -14,31 +14,40 @@ const areaSchema = new mongoose.Schema(
   { timestamps: true },
 );
 
-areaSchema.pre(/^find/, async function (next) {
-  const Model = mongoose.models["Area"];
-  const CityModel = mongoose.models["City"];
-  const StateModel = mongoose.models["State"];
-  const CountryModel = mongoose.models["Country"];
-  const count = await Model.countDocuments();
-  if (count === 0) {
-    await CountryModel.findOne({ default: true }).then(async (country) => {
-      await StateModel.findOne({ default: true }).then(async (state) => {
-        await CityModel.findOne({ default: true }).then(async (city) => {
-          await Model.insertMany([
-            {
-              name: "Nikol",
-              country: country._id,
-              state: state._id,
-              city: city._id,
-              default: true,
-            },
-          ]);
-          console.log(" Default Area via pre-find hook.");
-        });
-      });
-    });
+areaSchema.pre(/^find/, async function () {
+  try {
+    const Model = mongoose.models["Area"];
+    const CityModel = mongoose.models["City"];
+    const StateModel = mongoose.models["State"];
+    const CountryModel = mongoose.models["Country"];
+
+    const count = await Model.countDocuments();
+
+    if (count === 0) {
+      const country = await CountryModel.findOne({ default: true });
+      const state = await StateModel.findOne({ default: true });
+      const city = await CityModel.findOne({ default: true });
+
+      if (!country || !state || !city) {
+        console.log("⚠ Default country/state/city not found. Skipping area seed.");
+        return;
+      }
+
+      await Model.insertMany([
+        {
+          name: "Nikol",
+          country: country._id,
+          state: state._id,
+          city: city._id,
+          default: true,
+        },
+      ]);
+
+      console.log(" Default Area via pre-find hook.");
+    }
+  } catch (error) {
+    console.error("Area pre-find error:", error);
   }
-  next();
 });
 
-module.exports = mongoose.models.Area || mongoose.model("Area", areaSchema);
+module.exports = mongoose.model("Area", areaSchema);
