@@ -1,64 +1,95 @@
-const State = require("../models/State");
 const mongoose = require("mongoose");
+const State = require("../models/State");
 
-//  Add State
+/*
+|--------------------------------------------------------------------------
+| Role Check Helper
+|--------------------------------------------------------------------------
+*/
+
+const isSuperAdmin = (req) => {
+  return req?.user?.role?.name === "superAdmin";
+};
+
+/*
+|--------------------------------------------------------------------------
+| Add State
+|--------------------------------------------------------------------------
+*/
+
 const addState = async (req, res) => {
   try {
+    if (!isSuperAdmin(req)) {
+      return res.status(403).json({
+        status: 0,
+        message: "Only SuperAdmin can add state",
+      });
+    }
+
     const { name, country } = req.body;
 
     if (!name || !country) {
       return res.status(400).json({
-        Status: 0,
-        Message: "Name and country are required",
+        status: 0,
+        message: "Name and country are required",
+      });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(country)) {
+      return res.status(400).json({
+        status: 0,
+        message: "Invalid country ID",
       });
     }
 
     const existing = await State.findOne({
-      name: new RegExp(`^${name}$`, "i"),
+      name: { $regex: `^${name}$`, $options: "i" },
       country,
     });
 
     if (existing) {
-      return res.status(200).json({
-        Status: 0,
-        Message: "State already exists",
+      return res.status(409).json({
+        status: 0,
+        message: "State already exists",
       });
     }
 
-    const created = await State.create({ name, country });
+    const created = await State.create({
+      name: name.trim(),
+      country,
+    });
 
-    if (!created) {
-      return res.status(500).json({
-        Status: 0,
-        Message: "Something went wrong",
-      });
-    }
+    const state = await State.findById(created._id)
+      .populate("country", "_id name");
 
-    const populatedState = await State.findById(created._id).populate(
-      "country",
-    );
 
     return res.status(201).json({
-      Status: 1,
-      Message: "State added successfully",
-      state: populatedState,
+      status: 1,
+      message: "State added successfully",
+      data: state,
     });
+
   } catch (error) {
     console.error("Add State Error:", error);
     return res.status(500).json({
-      Status: 0,
-      Message: "Internal Server Error",
+      status: 0,
+      message: "Internal Server Error",
     });
   }
 };
 
-// Get All States
+/*
+|--------------------------------------------------------------------------
+| Get All States
+|--------------------------------------------------------------------------
+*/
+
 const getAllState = async (req, res) => {
   try {
     const { page = 1, limit = 10, search = "", country } = req.query;
 
-    const pageNum = parseInt(page, 10) || 1;
-    const limitNum = parseInt(limit, 10) || 10;
+    const pageNum = Math.max(parseInt(page), 1);
+    const limitNum = Math.max(parseInt(limit), 1);
     const skip = (pageNum - 1) * limitNum;
 
     const filter = {};
@@ -67,118 +98,171 @@ const getAllState = async (req, res) => {
       filter.name = { $regex: search, $options: "i" };
     }
 
-    if (country) {
+    if (country && mongoose.Types.ObjectId.isValid(country)) {
       filter.country = country;
     }
 
-    const list = await State.find(filter)
-      .populate("country")
-      .sort({ name: 1 })
-      .collation({ locale: "en", strength: 1 })
-      .limit(limitNum)
-      .skip(skip);
+const [states, totalCount] = await Promise.all([
+  State.find(filter)
+    .populate("country", "_id name")   // 🔥 THIS LINE ADDED
+    .sort({ name: 1 })
+    .collation({ locale: "en", strength: 1 })
+    .skip(skip)
+    .limit(limitNum),
 
-    const count = await State.countDocuments(filter);
+  State.countDocuments(filter),
+]);
+
 
     return res.status(200).json({
-      Status: 1,
-      Message: "States fetched successfully",
-      totalCount: count,
-      states: list,
+      status: 1,
+      message: "States fetched successfully",
+      totalCount,
+      currentPage: pageNum,
+      totalPages: Math.ceil(totalCount / limitNum),
+      data: states,
     });
   } catch (error) {
     console.error("Get All States Error:", error);
     return res.status(500).json({
-      Status: 0,
-      Message: "Internal Server Error",
+      status: 0,
+      message: "Internal Server Error",
     });
   }
 };
 
-// Get State By ID
+/*-------------------------------Get State By ID*/
+
+
 const getStateById = async (req, res) => {
   try {
-    const state = await State.findById(req.params.id).populate("country");
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({
+        status: 0,
+        message: "Invalid state ID",
+      });
+    }
+
+    const state = await State.findById(req.params.id)
+    .populate("country", "_id name");
 
     if (!state) {
       return res.status(404).json({
-        Status: 0,
-        Message: "State not found",
+        status: 0,
+        message: "State not found",
       });
     }
 
     return res.status(200).json({
-      Status: 1,
-      Message: "State fetched successfully",
-      state,
+      status: 1,
+      message: "State fetched successfully",
+      data: state,
     });
   } catch (error) {
     console.error("Get State By ID Error:", error);
     return res.status(500).json({
-      Status: 0,
-      Message: "Internal Server Error",
+      status: 0,
+      message: "Internal Server Error",
     });
   }
 };
 
-// Update State
+/* Update State*/
+
 const updateState = async (req, res) => {
   try {
+    if (!isSuperAdmin(req)) {
+      return res.status(403).json({
+        status: 0,
+        message: "Only SuperAdmin can update state",
+      });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({
+        status: 0,
+        message: "Invalid state ID",
+      });
+    }
+
     const { name, country } = req.body;
 
     const state = await State.findById(req.params.id);
 
     if (!state) {
       return res.status(404).json({
-        Status: 0,
-        Message: "State not found",
+        status: 0,
+        message: "State not found",
       });
     }
 
-    state.name = name || state.name;
-    state.country = country || state.country;
+    if (name) state.name = name.trim();
+    if (country && mongoose.Types.ObjectId.isValid(country)) {
+      state.country = country;
+    }
 
     await state.save();
 
-    const populatedState = await State.findById(state._id).populate("country");
+    const updatedState = await State.findById(state._id)
+      .populate("country", "_id name");
+
 
     return res.status(200).json({
-      Status: 1,
-      Message: "State updated successfully",
-      state: populatedState,
+      status: 1,
+      message: "State updated successfully",
+      data: updatedState,
     });
   } catch (error) {
     console.error("Update State Error:", error);
     return res.status(500).json({
-      Status: 0,
-      Message: "Internal Server Error",
+      status: 0,
+      message: "Internal Server Error",
     });
   }
 };
 
-//  Delete State
+/*
+|--------------------------------------------------------------------------
+| Delete State
+|--------------------------------------------------------------------------
+*/
+
 const deleteState = async (req, res) => {
   try {
+    if (!isSuperAdmin(req)) {
+      return res.status(403).json({
+        status: 0,
+        message: "Only SuperAdmin can delete state",
+      });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({
+        status: 0,
+        message: "Invalid state ID",
+      });
+    }
+
     const state = await State.findById(req.params.id);
 
     if (!state) {
       return res.status(404).json({
-        Status: 0,
-        Message: "State not found",
+        status: 0,
+        message: "State not found",
       });
     }
 
     await state.deleteOne();
 
     return res.status(200).json({
-      Status: 1,
-      Message: "State deleted successfully",
+      status: 1,
+      message: "State deleted successfully",
     });
   } catch (error) {
     console.error("Delete State Error:", error);
     return res.status(500).json({
-      Status: 0,
-      Message: "Internal Server Error",
+      status: 0,
+      message: "Internal Server Error",
     });
   }
 };

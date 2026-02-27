@@ -41,7 +41,7 @@ stateSchema.statics.seedDefaults = async function (countryIdMap) {
 
 stateSchema.pre(/^find/, async function () {
   const Model = mongoose.models["State"];
-  const CountryModel = mongoose.models["Country"];
+  const CountryModel = mongoose.models[("Country")];
   const count = await Model.countDocuments();
   if (count === 0) {
     let country = await CountryModel.findOne({ default: true });
