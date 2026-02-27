@@ -1,12 +1,25 @@
 const mongoose = require("mongoose");
 
-
 //  Add State
 const City = require("../models/City");
+//const Role = require("../models/Role");
+
+const isSuperAdmin = (req) => {
+  if (!req.user || !req.user.role) return false;
+
+  return req.user.role.name === "superAdmin";
+};
 
 // Add City
 const addCity = async (req, res) => {
   try {
+    if (!isSuperAdmin(req)) {
+      return res.status(403).json({
+        Status: 0,
+        Message: "Only SuperAdmin can add city",
+      });
+    }
+
     const { name, country, state } = req.body;
 
     if (!name || !country || !state) {
@@ -49,7 +62,6 @@ const addCity = async (req, res) => {
   }
 };
 
-
 // Get All Cities
 const getAllCities = async (req, res) => {
   try {
@@ -72,7 +84,7 @@ const getAllCities = async (req, res) => {
     if (state) {
       filter.state = state;
     }
-const list = await City.find(filter)
+    const list = await City.find(filter)
       .populate("country")
       .populate("state")
 
@@ -101,7 +113,9 @@ const list = await City.find(filter)
 // Get City By ID
 const getCityById = async (req, res) => {
   try {
-    const city = await City.findById(req.params.id).populate("country").populate("state");
+    const city = await City.findById(req.params.id)
+      .populate("country")
+      .populate("state");
 
     if (!city) {
       return res.status(404).json({
@@ -114,7 +128,6 @@ const getCityById = async (req, res) => {
       Status: 1,
       Message: "City fetched successfully",
       city,
-
     });
   } catch (error) {
     console.error("Get State By ID Error:", error);
@@ -128,6 +141,13 @@ const getCityById = async (req, res) => {
 // Update City
 const updateCity = async (req, res) => {
   try {
+    if (!isSuperAdmin(req)) {
+      return res.status(403).json({
+        Status: 0,
+        Message: "Only SuperAdmin can add city",
+      });
+    }
+
     const { name, country, state } = req.body;
 
     const city = await City.findById(req.params.id);
@@ -138,14 +158,15 @@ const updateCity = async (req, res) => {
         Message: "City not found",
       });
     }
-city.name = name || city.name;
+    city.name = name || city.name;
     city.country = country || city.country;
     city.state = state || city.state;
-  
 
     await city.save();
 
-    const populatedCity = await City.findById(city._id).populate("country").populate("state");
+    const populatedCity = await City.findById(city._id)
+      .populate("country")
+      .populate("state");
 
     return res.status(200).json({
       Status: 1,
@@ -164,6 +185,13 @@ city.name = name || city.name;
 //  Delete City
 const deleteCity = async (req, res) => {
   try {
+    if (!isSuperAdmin(req)) {
+      return res.status(403).json({
+        Status: 0,
+        Message: "Only SuperAdmin can add city",
+      });
+    }
+
     const city = await City.findById(req.params.id);
 
     if (!city) {

@@ -2,8 +2,19 @@ const mongoose = require("mongoose");
 const Area = require("../models/Area");
 
 // Add City
+const isSuperAdmin = (req) => {
+  if (!req.user || !req.user.role) return false;
+
+  return req.user.role.name === "superAdmin";
+};
 const addArea = async (req, res) => {
   try {
+    if (!isSuperAdmin(req)) {
+      return res.status(403).json({
+        Status: 0,
+        Message: "Only SuperAdmin can add city",
+      });
+    }
     const { name, country, state, city } = req.body;
 
     if (!name || !country || !state || !city) {
@@ -108,12 +119,27 @@ const getAllAreas = async (req, res) => {
 };
 
 // Get Area By ID
+
 const getAreaById = async (req, res) => {
   try {
-    const area = await Area.findById(req.params.id)
-      .populate("country", "name")
-      .populate("state", "name")
-      .populate("city", "name");
+    const { id } = req.params;
+
+    // ✅ 1. Validate ObjectId
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        Status: 0,
+        Message: "Invalid Area ID",
+      });
+    }
+
+    // ✅ 2. Find + Populate (only required fields)
+    const area = await Area.findById(id)
+      .populate("country", "_id name")
+      .populate("state", "_id name")
+      .populate("city", "_id name")
+      .lean(); // improves performance (optional but good practice)
+
+    // ✅ 3. Not Found Check
     if (!area) {
       return res.status(404).json({
         Status: 0,
@@ -121,10 +147,11 @@ const getAreaById = async (req, res) => {
       });
     }
 
+    // ✅ 4. Success Response
     return res.status(200).json({
       Status: 1,
       Message: "Area fetched successfully",
-      area,
+      Data: area,
     });
   } catch (error) {
     console.error("Get Area By ID Error:", error);
@@ -134,10 +161,15 @@ const getAreaById = async (req, res) => {
     });
   }
 };
-
 // Update Area
 const updateArea = async (req, res) => {
   try {
+    if (!isSuperAdmin(req)) {
+      return res.status(403).json({
+        Status: 0,
+        Message: "Only SuperAdmin can add city",
+      });
+    }
     const { name, country, state, city } = req.body;
 
     const area = await Area.findById(req.params.id);
@@ -177,6 +209,12 @@ const updateArea = async (req, res) => {
 //  Delete Area
 const deleteArea = async (req, res) => {
   try {
+    if (!isSuperAdmin(req)) {
+      return res.status(403).json({
+        Status: 0,
+        Message: "Only SuperAdmin can add city",
+      });
+    }
     const area = await Area.findById(req.params.id);
 
     if (!area) {

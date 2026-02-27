@@ -1,8 +1,20 @@
 const asyncHandler = require("express-async-handler");
 const Country = require("../models/Country");
+//const Role = require("../models/Role");
 
+const isSuperAdmin = (req) => {
+  if (!req.user || !req.user.role) return false;
+
+  return req.user.role.name === "superAdmin";
+};
 const addCountry = asyncHandler(async (req, res) => {
   const { name } = req.body;
+  if (!isSuperAdmin(req)) {
+    return res.status(403).json({
+      Status: 0,
+      Message: "Only SuperAdmin can add city",
+    });
+  }
 
   const existingCountry = await Country.findOne({
     name: new RegExp(`^${name}$`, "i"),
@@ -58,7 +70,15 @@ const getCountryById = asyncHandler(async (req, res) => {
   });
 });
 const deleteCountry = asyncHandler(async (req, res) => {
+
+  if (!isSuperAdmin(req)) {
+    return res.status(403).json({
+      Status: 0,
+      Message: "Only SuperAdmin can add city",
+    });
+  }
   const country = await Country.findById(req.params.id);
+
   if (!country) {
     return res.status(404).json({
       Status: 0,

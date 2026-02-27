@@ -7,10 +7,11 @@ const {
   updateArea,
   deleteArea,
 } = require("../controllers/AreaController");
-router.post("/", addArea);
-router.get("/", getAllAreas);
-router.get("/:id", getAreaById);
-router.put("/:id", updateArea);
-router.delete("/:id", deleteArea);
+const { protect } = require("../middleware/auth");
+router.post("/", protect, addArea);
+router.get("/", protect, getAllAreas);
+router.get("/:id", protect, getAreaById);
+router.put("/:id", protect, updateArea);
+router.delete("/:id", protect, deleteArea);
 
 module.exports = router;

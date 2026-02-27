@@ -7,10 +7,11 @@ const {
   updateState,
   deleteState,
 } = require("../controllers/StateController");
-router.post("/", addState);
-router.get("/", getAllState);
-router.get("/:id", getStateById);
-router.put("/:id", updateState);
-router.delete("/:id", deleteState);
+const { protect } = require("../middleware/auth");
+router.post("/", protect, addState);
+router.get("/", protect, getAllState);
+router.get("/:id", protect, getStateById);
+router.put("/:id", protect, updateState);
+router.delete("/:id", protect, deleteState);
 
 module.exports = router;
