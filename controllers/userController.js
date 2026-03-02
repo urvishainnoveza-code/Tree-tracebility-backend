@@ -590,7 +590,7 @@ const deleteUser = async (req, res) => {
         .status(400)
         .json({ Status: 0, Message: "You cannot delete your own account" });
 
-    const user = await User.findById(userId); // ✅ triggers findOneAndDelete hook
+    const user = await User.findById(userId); 
     if (!user)
       return res.status(404).json({ Status: 0, Message: "User not found" });
     if (user.isdeleted) {

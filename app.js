@@ -20,12 +20,12 @@ app.get("/", (req, res) => {
 });
 
 app.use("/api/countries", countryRoutes);
-app.use("/api/states", stateRoutes);
+app.use("/api/states", stateRoutes);  
 app.use("/api/cities", cityRoutes);
 app.use("/api/areas", areaRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/treename", treenameRoutes);
-app.use("/api/groups", groupRoutes);
+app.use("/api/groups", groupRoutes);  
 app.use("/api/assign", assignRoutes);
 app.use("/api/plantation", treePlantationRoutes);
 app.use((req, res) => {

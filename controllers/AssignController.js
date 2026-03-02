@@ -3,241 +3,142 @@ const Group = require("../models/Group");
 const Area = require("../models/Area");
 const mongoose = require("mongoose");
 
-//get user group id
 const getUserGroupIds = async (userId) => {
   const groups = await Group.find({ users: userId }).select("_id");
   return groups.map((g) => g._id.toString());
 };
 
-//check if user is superAdmin
 const isSuperAdmin = (user) => {
   return user?.role?.name === "superAdmin";
 };
 
-//assign tree
-const assignTree = async (req, res) => {
+const createAssignment = async (req, res) => {
   try {
-    if (!req.user) {
-      return res.status(401).json({
-        Status: 0,
-        Message: "Unauthorized access",
-      });
-    }
+    const { treeName, count, country, city, area, group, address } = req.body;
 
-    if (!isSuperAdmin(req.user)) {
-      return res.status(403).json({
-        Status: 0,
-        Message: "Only superAdmin can assign trees",
-      });
-    }
-    const { treeName, count, country, city, area, address, selectedGroup } =
-      req.body;
     if (!treeName || !count || !country || !city || !area) {
       return res.status(400).json({
         Status: 0,
-        Message: "All required fields must be provided",
+        Message: "Missing required fields",
       });
     }
 
-    let group = await Group.findOne({ area });
 
-    if (!group) {
-      const groupsInCity = await Group.find().populate({
-        path: "area",
-        match: { city: city },
-      });
+    let assignedGroupId = group;
 
-      const validCityGroups = groupsInCity.filter((g) => g.area !== null);
-
-      if (validCityGroups.length === 0) {
-        return res.status(404).json({
-          Status: 0,
-          Message: "No group found in this city",
-        });
-      }
-
-      if (validCityGroups.length === 1) {
-        group = validCityGroups[0];
-      } else if (!selectedGroup) {
-        return res.status(200).json({
-          Status: 2,
-          Message: "Multiple groups found in this city. Please select one.",
-          Groups: validCityGroups.map((g) => ({
-            _id: g._id,
-            name: g.name,
-          })),
-        });
-      } else {
-        group = await Group.findById(selectedGroup);
-
-        if (!group) {
-          return res.status(400).json({
-            Status: 0,
-            Message: "Selected group is invalid",
-          });
-        }
+    if (!assignedGroupId) {
+      const areaGroup = await Group.findOne({ area }).select("_id");
+      if (areaGroup) {
+        assignedGroupId = areaGroup._id;
       }
     }
 
-    //   assign create
+    // Validate that we have a group
+    if (!assignedGroupId) {
+      return res.status(400).json({
+        Status: 0,
+        Message: "No group found. Please select a group.",
+      });
+    }
 
-    const newAssign = await TreeAssign.create({
+    // Create assignment with the correct group
+    const assignment = new TreeAssign({
       treeName,
       count,
       country,
       city,
       area,
-      address,
-      group: group._id,
+      group: assignedGroupId, // ← SAVE THE SELECTED GROUP HERE
+      address: address || "",
+      status: "assigned",
       assignedBy: req.user._id,
     });
 
-    const populatedAssign = await TreeAssign.findById(newAssign._id).populate(
-      "group",
-      "name users",
-    );
+    await assignment.save();
 
-    return res.status(201).json({
+    // Populate all fields including the group
+    await assignment.populate([
+      { path: "treeName", select: "name" },
+      { path: "group", select: "name" }, // ← POPULATE GROUP NAME
+      { path: "country", select: "name" },
+      { path: "city", select: "name" },
+      { path: "area", select: "name" },
+      { path: "assignedBy", select: "firstName lastName" },
+    ]);
+
+    res.status(201).json({
       Status: 1,
       Message: "Tree assigned successfully",
-      Data: populatedAssign,
+      data: assignment, // ← lowercase 'data'
     });
   } catch (error) {
-    console.error("assignTree error:", error);
-    return res.status(500).json({
+    res.status(500).json({
       Status: 0,
-      Message: "Server error while assigning tree",
+      Message: error.message,
     });
   }
 };
-//get all assign tree
-const getAllAssignTree = async (req, res) => {
+// GET ALL ASSIGNMENTS
+const getAllAssignments = async (req, res) => {
   try {
-    if (!req.user) {
-      return res.status(401).json({
-        Status: 0,
-        Message: "Unauthorized access",
-      });
-    }
+    const { page = 1, limit = 10 } = req.query;
+    const skip = (page - 1) * limit;
 
-    const isAdmin = isSuperAdmin(req.user);
-
-    const { status, city, group, page = 1, limit = 10 } = req.query;
-
-    const filter = {};
-
-    if (status) filter.status = status;
-    if (city) filter.city = city;
-    if (group) filter.group = group;
-
-    if (!isAdmin) {
-      const groupIds = await getUserGroupIds(req.user._id);
-      filter.group = { $in: groupIds };
-    }
-
-    const pageNum = Number(page);
-    const limitNum = Number(limit);
-    const skip = (pageNum - 1) * limitNum;
-    const total = await TreeAssign.countDocuments(filter);
-
-    const assignments = await TreeAssign.find(filter)
-      .populate("group", "name users")
+    const assignments = await TreeAssign.find()
+      .populate("treeName", "name")
+      .populate("group", "name") // ← POPULATE GROUP NAME
+      .populate("country", "name")
+      .populate("city", "name")
+      .populate("area", "name")
       .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(Number(limit));
+      .limit(parseInt(limit))
+      .skip(skip);
 
-    const formattedData = assignments.map((assign) => ({
-      ...assign.toObject(),
-      group: assign.group
-        ? {
-            _id: assign.group._id,
-            name: assign.group.name,
-            userCount: assign.group.users ? assign.group.users.length : 0,
-          }
-        : null,
-    }));
+    const total = await TreeAssign.countDocuments();
 
-    return res.status(200).json({
+    res.status(200).json({
       Status: 1,
-      Message: "Assignments fetched successfully",
-      TotalRecords: total,
-      CurrentPage: Number(page),
-      TotalPages: Math.ceil(total / limit),
-      Data: formattedData,
+      data: assignments, // ← lowercase 'data'
+      totalPages: Math.ceil(total / limit),
+      totalRecords: total,
     });
   } catch (error) {
-    console.error("getAllAssignTree error:", error);
-    return res.status(500).json({
+    res.status(500).json({
       Status: 0,
-      Message: "Server error while fetching assignments",
+      Message: error.message,
     });
   }
 };
-// get assign tree by id
-const getAssignTreeById = async (req, res) => {
+// GET ASSIGNMENT BY ID
+const getAssignmentById = async (req, res) => {
   try {
-    if (!req.user) {
-      return res.status(401).json({
-        Status: 0,
-        Message: "Unauthorized access",
-      });
-    }
+    const assignment = await TreeAssign.findById(req.params.id)
+      .populate("treeName", "name")
+      .populate({
+        path: "group",
+        select: "name users",
+        populate: { path: "users", select: "firstName lastName email mobile" },
+      }) // ← POPULATE GROUP WITH USERS
+      .populate("country", "name")
+      .populate("city", "name")
+      .populate("area", "name")
+      .populate("assignedBy", "firstName lastName");
 
-    const assignId = req.params.id;
-
-    if (!mongoose.Types.ObjectId.isValid(assignId)) {
-      return res.status(400).json({
-        Status: 0,
-        Message: "Invalid assignment ID",
-      });
-    }
-
-    const assign = await TreeAssign.findById(assignId).populate(
-      "group",
-      "name users",
-    );
-
-    if (!assign) {
+    if (!assignment) {
       return res.status(404).json({
         Status: 0,
         Message: "Assignment not found",
       });
     }
 
-    const isAdmin = isSuperAdmin(req.user);
-
-    if (!isAdmin) {
-      const groupIds = await getUserGroupIds(req.user._id);
-
-      if (!assign.group || !groupIds.includes(assign.group._id.toString())) {
-        return res.status(403).json({
-          Status: 0,
-          Message: "You can only view assignments for your group",
-        });
-      }
-    }
-
-    const formattedAssign = {
-      ...assign.toObject(),
-      group: assign.group
-        ? {
-            _id: assign.group._id,
-            name: assign.group.name,
-            userCount: assign.group.users ? assign.group.users.length : 0,
-          }
-        : null,
-    };
-
-    return res.status(200).json({
+    res.status(200).json({
       Status: 1,
-      Message: "Assignment fetched successfully",
-      Data: formattedAssign,
+      data: assignment, // ← lowercase 'data'
     });
   } catch (error) {
-    console.error("getAssignTreeById error:", error);
-    return res.status(500).json({
+    res.status(500).json({
       Status: 0,
-      Message: "Server error while fetching assignment",
+      Message: error.message,
     });
   }
 };
@@ -306,9 +207,9 @@ const cancelTreeAssign = async (req, res) => {
 };
 
 module.exports = {
-  assignTree,
-  getAllAssignTree,
-  getAssignTreeById,
+  createAssignment,
+  getAllAssignments,
+  getAssignmentById,
   completeTreeAssign,
   cancelTreeAssign,
 };

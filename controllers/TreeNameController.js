@@ -1,7 +1,6 @@
 const TreeName = require("../models/TreeName");
 const mongoose = require("mongoose");
 
-
 //  Add TreeNmae
 const addTreeName = async (req, res) => {
   try {
@@ -134,10 +133,10 @@ const updateTreeName = async (req, res) => {
       });
     }
 
-    const updated = await TreeName.sfindByIdAndUpdate(
+    const updated = await TreeName.findByIdAndUpdate(
       req.params.id,
       { name: name.trim() },
-      { new: true }
+      { new: true },
     );
 
     if (!updated) {

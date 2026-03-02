@@ -3,16 +3,16 @@ const router = express.Router();
 const { protect } = require("../middleware/auth");
 
 const {
-  assignTree,
+  createAssignment,
   completeTreeAssign,
   cancelTreeAssign,
-  getAllAssignTree,
-  getAssignTreeById,
+  getAllAssignments,
+  getAssignmentById,
 } = require("../controllers/AssignController");
 
-router.post("/", protect, assignTree);
-router.get("/", protect, getAllAssignTree);
-router.get("/:id", protect, getAssignTreeById);
+router.post("/", protect, createAssignment);
+router.get("/", protect, getAllAssignments);
+router.get("/:id", protect, getAssignmentById);
 router.put("/:id/complete", protect, completeTreeAssign);
 router.put("/:id/cancel", protect, cancelTreeAssign);
 
