@@ -4,98 +4,7 @@ const User = require("../models/User");
 const Role = require("../models/Role");
 const Area = require("../models/Area");
 const Group = require("../models/Group");
-
 const generateToken = require("../middleware/generatetoken");
-
-//Superadmin create user
-
-/*const createUser = async (req, res) => {
-  try {
-    if (!req.user) {
-      return res
-        .status(401)
-        .json({ Status: 0, Message: "Unauthorized access" });
-    }
-
-    const currentUserRole = await Role.findById(req.user.role);
-    if (!currentUserRole || currentUserRole.name !== "superAdmin") {
-      return res
-        .status(403)
-        .json({ Status: 0, Message: "Only superAdmin can create users" });
-    }
-
-    const {
-      firstName,
-      lastName,
-      email,
-      //password,
-      phoneNo,
-      birthDate,
-      gender,
-      country,
-      state,
-      city,
-      area,
-      landmark,
-      societyName,
-      houseNo,
-      userType = "user",
-    } = req.body;
-
-    if (!firstName || !lastName || !email) {
-      return res
-        .status(400)
-        .json({ Status: 0, Message: "All required fields must be provided" });
-    }
-
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      return res
-        .status(400)
-        .json({ Status: 0, Message: "Invalid email format" });
-    }
-
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
-      return res
-        .status(400)
-        .json({ Status: 0, Message: "User already exists" });
-    }
-
-    const userRole = await Role.findOne({ name: userType });
-    if (!userRole) {
-      return res.status(400).json({ Status: 0, Message: "Invalid user type" });
-    }
-
-    const newUser = await User.create({
-      firstName,
-      lastName,
-      email,
-      // password,
-      phoneNo,
-      birthDate,
-      gender,
-      country,
-      state,
-      city,
-      area,
-      landmark,
-      societyName,
-      houseNo,
-      role: userRole._id,
-      addedBy: req.user._id,
-      emailVerified: true,
-    });
-
-    return res
-      .status(201)
-      .json({ Status: 1, Message: "User created successfully", Data: newUser });
-  } catch (error) {
-    console.error("createUser error:", error);
-    return res.status(500).json({ Status: 0, Message: "Server error" });
-  }
-};*/
-
 //create user
 const createUser = async (req, res) => {
   try {
@@ -203,14 +112,11 @@ const createUser = async (req, res) => {
         users: [newUser._id],
       });
     } else {
-      const exists = group.users.some(
-        (id) => id.toString() === newUser._id.toString(),
+      // Use $addToSet to prevent duplicates at database level
+      await Group.updateOne(
+        { _id: group._id },
+        { $addToSet: { users: newUser._id } },
       );
-
-      if (!exists) {
-        group.users.push(newUser._id);
-        await group.save();
-      }
     }
     const populatedUser = await User.findById(newUser._id)
       .select("-password -otp -resetToken")
@@ -295,7 +201,7 @@ const signupUser = async (req, res) => {
       email: email.toLowerCase().trim(),
       phoneNo,
       role: defaultRole._id,
-      emailVerified: false,
+      emailVerified: true, // Auto-verify on signup since they get token immediately
     });
 
     const userToken = generateToken(newUser._id);
@@ -449,6 +355,10 @@ const getAllUsers = async (req, res) => {
       firstName,
       email,
       phoneNo,
+      country,
+      state,
+      city,
+      area,
       sortBy = "createdAt",
       sortOrder = "desc",
     } = req.query;
@@ -458,9 +368,13 @@ const getAllUsers = async (req, res) => {
     const skip = (page - 1) * limit;
 
     const filter = {};
-    if (email) filter.email = email;
-    if (firstName) filter.firstName = { $regex: firstName, $options: "i" };
-    if (phoneNo) filter.phoneNo = phoneNo;
+ //   if (email) filter.email = email;
+   // if (firstName) filter.firstName = { $regex: firstName, $options: "i" };
+   // if (phoneNo) filter.phoneNo = phoneNo;
+    if (country) filter.country = country;
+    if (state) filter.state = state;
+    if (city) filter.city = city;
+    if (area) filter.area = area;
 
     if (search) {
       filter.$or = [
@@ -524,22 +438,6 @@ const getUserById = async (req, res) => {
         Message: "Unauthorized access",
       });
     }
-
-    const currentUserRole = await Role.findById(req.user.role);
-
-    if (!currentUserRole) {
-      return res.status(403).json({
-        Status: 0,
-        Message: "Role not found",
-      });
-    }
-
-    if (currentUserRole.name !== "superAdmin") {
-      return res.status(403).json({
-        Status: 0,
-        Message: "Only superAdmin can view user details",
-      });
-    }
     const user = await User.findById(id)
       .select("-password -otp -resetToken -resetTokenTime")
       .populate("role", "name")
@@ -590,11 +488,13 @@ const deleteUser = async (req, res) => {
         .status(400)
         .json({ Status: 0, Message: "You cannot delete your own account" });
 
-    const user = await User.findById(userId); 
+    const user = await User.findById(userId);
     if (!user)
       return res.status(404).json({ Status: 0, Message: "User not found" });
     if (user.isdeleted) {
-      return res.status(400).json({ Status: 0, Message: "User already deleted" });
+      return res
+        .status(400)
+        .json({ Status: 0, Message: "User already deleted" });
     }
     const deletedUser = await User.findByIdAndUpdate(
       userId,
@@ -604,10 +504,10 @@ const deleteUser = async (req, res) => {
           deletedAt: new Date(),
           isdeletedBy: req.user._id,
           isActive: false,
-        }
-        
-      },      { new: true },
-    )
+        },
+      },
+      { new: true },
+    );
     return res.status(200).json({
       Status: 1,
       Message:
@@ -621,126 +521,6 @@ const deleteUser = async (req, res) => {
   }
 };
 
-/*const updateUser = async (req, res) => {
-  try {
-    const userId = req.params.id;
-    const currentUser = req.user;
-
-    if (!currentUser) {
-      return res.status(401).json({
-        Status: 0,
-        Message: "Unauthorized access",
-      });
-    }
-
-    const currentUserRole = await Role.findById(currentUser.role);
-
-    if (!currentUserRole) {
-      return res.status(403).json({
-        Status: 0,
-        Message: "Role not found",
-      });
-    }
-
-    const isSuperAdmin = currentUserRole.name === "superAdmin";
-    const hasUpdatePermission = currentUserRole?.permission?.some(
-      (permission) => permission.name === "update_user",
-    );
-
-    const isSelfUpdate = currentUser._id.toString() === userId;
-
-    if (!isSelfUpdate && !isSuperAdmin && !hasUpdatePermission) {
-      return res.status(403).json({
-        Status: 0,
-        Message: "You don't have permission to update this user",
-      });
-    }
-
-    const user = await User.findById(userId);
-    if (!user) {
-      return res.status(404).json({
-        Status: 0,
-        Message: "User not found",
-      });
-    }
-
-    // Prepare fields to update
-    const {
-      firstName,
-      lastName,
-      email,
-      phoneNo,
-      country,
-      state,
-      city,
-      area,
-      landmark,
-      societyName,
-      houseNo,
-      userStatus,
-      addedBy,
-    } = req.body;
-
-    const updateData = {};
-
-    if (firstName !== undefined) updateData.firstName = firstName;
-    if (lastName !== undefined) updateData.lastName = lastName;
-    if (phoneNo !== undefined) updateData.phoneNo = phoneNo;
-    if (country !== undefined) updateData.country = country;
-    if (state !== undefined) updateData.state = state;
-    if (city !== undefined) updateData.city = city;
-    if (area !== undefined) updateData.area = area;
-    if (landmark !== undefined) updateData.landmark = landmark;
-    if (societyName !== undefined) updateData.societyName = societyName;
-    if (houseNo !== undefined) updateData.houseNo = houseNo;
-
-    if (email && email !== user.email) {
-      const existingUser = await User.findOne({ email });
-      if (existingUser) {
-        return res.status(400).json({
-          Status: 0,
-          Message: "Email already exists",
-        });
-      }
-      updateData.email = email;
-    }
-
-    if (isSuperAdmin) {
-      if (userStatus !== undefined) updateData.userStatus = userStatus;
-      if (addedBy !== undefined) updateData.addedBy = addedBy;
-    }
-
-    // Update user
-    // Update user
-    await User.findByIdAndUpdate(
-      userId,
-      { $set: updateData },
-      { runValidators: true },
-    );
-
-    // Fetch updated user with pre-hook populate
-    const updatedUser = await User.findById(userId); // This will trigger your pre-find hook
-
-    const userResponse = updatedUser.toObject();
-    delete userResponse.password;
-    delete userResponse.otp;
-    delete userResponse.resetToken;
-    delete userResponse.resetTokenTime;
-
-    return res.status(200).json({
-      Status: 1,
-      Message: "User updated successfully",
-      user: userResponse,
-    });
-  } catch (error) {
-    console.error("updateUser error:", error);
-    return res.status(500).json({
-      Status: 0,
-      Message: "Server error",
-      error: error.message,
-    });
-  }
-};*/
 const updateUser = async (req, res) => {
   try {
     const userId = req.params.id;
@@ -789,6 +569,8 @@ const updateUser = async (req, res) => {
       lastName,
       email,
       phoneNo,
+      birthDate,
+      gender,
       area,
       landmark,
       societyName,
@@ -799,9 +581,12 @@ const updateUser = async (req, res) => {
 
     const updateData = {};
 
+    // Update basic fields
     if (firstName !== undefined) updateData.firstName = firstName;
     if (lastName !== undefined) updateData.lastName = lastName;
     if (phoneNo !== undefined) updateData.phoneNo = phoneNo;
+    if (birthDate !== undefined) updateData.birthDate = birthDate;
+    if (gender !== undefined) updateData.gender = gender;
     if (landmark !== undefined) updateData.landmark = landmark;
     if (societyName !== undefined) updateData.societyName = societyName;
     if (houseNo !== undefined) updateData.houseNo = houseNo;
@@ -810,18 +595,21 @@ const updateUser = async (req, res) => {
     if (email && email !== user.email) {
       const existingUser = await User.findOne({ email });
       if (existingUser) {
-        return res
-          .status(400)
-          .json({ Status: 0, Message: "Email already exists" });
+        return res.status(400).json({
+          Status: 0,
+          Message: "Email already exists",
+        });
       }
       updateData.email = email.toLowerCase().trim();
     }
 
+    // SuperAdmin only fields
     if (isSuperAdmin) {
       if (userStatus !== undefined) updateData.userStatus = userStatus;
       if (addedBy !== undefined) updateData.addedBy = addedBy;
     }
 
+    // Handle area change and group assignment
     if (area) {
       const areaData = await Area.findById(area).populate({
         path: "city",
@@ -833,20 +621,28 @@ const updateUser = async (req, res) => {
 
       if (
         !areaData ||
-        !areaData.city ||
+        !areaData.city || 
         !areaData.city.state ||
         !areaData.city.state.country
       ) {
-        return res
-          .status(400)
-          .json({ Status: 0, Message: "Area location hierarchy incomplete" });
+        return res.status(400).json({
+          Status: 0,
+          Message: "Area location hierarchy incomplete",
+        });
       }
 
+      // Update location fields
       updateData.area = areaData._id;
       updateData.city = areaData.city._id;
       updateData.state = areaData.city.state._id;
       updateData.country = areaData.city.state.country._id;
 
+      // Remove user from old group if area is changing
+      if (user.area && user.area.toString() !== areaData._id.toString()) {
+        await Group.updateMany({ users: userId }, { $pull: { users: userId } });
+      }
+
+      // Add user to new group using $addToSet to prevent duplicates
       let group = await Group.findOne({ area: areaData._id });
 
       if (!group) {
@@ -856,28 +652,33 @@ const updateUser = async (req, res) => {
           users: [user._id],
         });
       } else {
-        const exists = group.users.some(
-          (id) => id.toString() === user._id.toString(),
+        await Group.updateOne(
+          { _id: group._id },
+          { $addToSet: { users: user._id } },
         );
-        if (!exists) {
-          group.users.push(user._id);
-          await group.save();
-        }
       }
     }
 
+    // Update user in database
     await User.findByIdAndUpdate(
       userId,
       { $set: updateData },
       { runValidators: true },
     );
+
+    // Fetch updated user with populated fields
     const updatedUser = await User.findById(userId)
+      .select("-password -otp -resetToken")
       .populate("country", "name")
       .populate("state", "name")
       .populate("city", "name")
       .populate("area", "name")
       .populate("role", "name")
-      .populate({ path: "addedBy", select: "_id firstName lastName role" });
+      .populate({
+        path: "addedBy",
+        select: "_id firstName lastName role",
+        populate: { path: "role", select: "name" },
+      });
 
     return res.status(200).json({
       Status: 1,

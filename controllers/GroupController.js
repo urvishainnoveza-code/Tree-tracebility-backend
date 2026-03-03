@@ -1,7 +1,7 @@
 const mongoose = require("mongoose");
 const Group = require("../models/Group");
 const User = require("../models/User");
-    const Area = require("../models/Area");
+const Area = require("../models/Area");
 
 const getMemberCount = (group) => {
   if (!group || !group.users) {
@@ -19,7 +19,6 @@ const getAllGroups = async (req, res) => {
 
     // If city filter provided, get all areas in that city
     if (city) {
-  
       const areas = await Area.find({ city }).select("_id");
       const areaIds = areas.map((a) => a._id);
 
@@ -30,10 +29,18 @@ const getAllGroups = async (req, res) => {
       }
     }
 
-    const groups = await Group.find(filter).populate("area", "name").populate({
-      path: "users",
-      select: "firstName lastName email _id",
-    });
+    const groups = await Group.find(filter)
+      .populate("area", "name")
+      .populate({
+        path: "users",
+        select: "firstName lastName email phoneNo _id country state city area",
+        populate: [
+          { path: "country", select: "_id name" },
+          { path: "state", select: "_id name" },
+          { path: "city", select: "_id name" },
+          { path: "area", select: "_id name" },
+        ],
+      });
 
     const data = groups.map((group) => ({
       ...group.toObject(),
@@ -53,7 +60,13 @@ const getGroupById = async (req, res) => {
       .populate("area", "name")
       .populate({
         path: "users",
-        select: "firstName lastName email _id",
+        select: "firstName lastName email phoneNo _id country state city area",
+        populate: [
+          { path: "country", select: "_id name" },
+          { path: "state", select: "_id name" },
+          { path: "city", select: "_id name" },
+          { path: "area", select: "_id name" },
+        ],
       });
 
     if (!group) {
@@ -99,11 +112,14 @@ const addUserToGroup = async (req, res) => {
   try {
     const { groupId, userId } = req.params;
 
-    // Check if user is superAdmin
-    if (req.user.role?.name !== "superAdmin") {
+    // Allow superAdmin to add any user, or allow user to add themselves
+    const isUserAddingSelf = req.user._id.toString() === userId;
+    const isSuperAdmin = req.user.role?.name === "superAdmin";
+
+    if (!isUserAddingSelf && !isSuperAdmin) {
       return res.status(403).json({
         Status: 0,
-        Message: "Only superAdmin can add users to groups",
+        Message: "You can only add yourself to a group",
       });
     }
 
@@ -141,16 +157,22 @@ const addUserToGroup = async (req, res) => {
       });
     }
 
-    // Add user to group
-    group.users.push(userId);
-    await group.save();
-
-    // Return updated group
-    const updatedGroup = await Group.findById(groupId)
+    // Use $addToSet to add user and prevent duplicates at database level
+    const updatedGroup = await Group.findByIdAndUpdate(
+      groupId,
+      { $addToSet: { users: userId } },
+      { new: true, runValidators: true },
+    )
       .populate("area", "name")
       .populate({
         path: "users",
-        select: "firstName lastName email _id",
+        select: "firstName lastName email phoneNo _id country state city area",
+        populate: [
+          { path: "country", select: "_id name" },
+          { path: "state", select: "_id name" },
+          { path: "city", select: "_id name" },
+          { path: "area", select: "_id name" },
+        ],
       });
 
     res.status(200).json({
@@ -174,7 +196,13 @@ const getGroupByArea = async (req, res) => {
       .populate("area", "name")
       .populate({
         path: "users",
-        select: "firstName lastName email _id",
+        select: "firstName lastName email phoneNo _id country state city area",
+        populate: [
+          { path: "country", select: "_id name" },
+          { path: "state", select: "_id name" },
+          { path: "city", select: "_id name" },
+          { path: "area", select: "_id name" },
+        ],
       });
 
     if (!group) {
