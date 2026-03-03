@@ -14,7 +14,8 @@ const isSuperAdmin = (user) => {
 
 const createAssignment = async (req, res) => {
   try {
-    const { treeName, count, country, city, area, group, address } = req.body;
+    const { treeName, count, country, state, city, area, group, address } =
+      req.body;
 
     if (!treeName || !count || !country || !city || !area) {
       return res.status(400).json({
@@ -22,7 +23,6 @@ const createAssignment = async (req, res) => {
         Message: "Missing required fields",
       });
     }
-
 
     let assignedGroupId = group;
 
@@ -46,6 +46,7 @@ const createAssignment = async (req, res) => {
       treeName,
       count,
       country,
+      state,
       city,
       area,
       group: assignedGroupId, // ← SAVE THE SELECTED GROUP HERE
@@ -61,6 +62,7 @@ const createAssignment = async (req, res) => {
       { path: "treeName", select: "name" },
       { path: "group", select: "name" }, // ← POPULATE GROUP NAME
       { path: "country", select: "name" },
+      { path: "state", select: "name" },
       { path: "city", select: "name" },
       { path: "area", select: "name" },
       { path: "assignedBy", select: "firstName lastName" },
@@ -81,20 +83,36 @@ const createAssignment = async (req, res) => {
 // GET ALL ASSIGNMENTS
 const getAllAssignments = async (req, res) => {
   try {
-    const { page = 1, limit = 10 } = req.query;
+    const {
+      page = 1,
+      limit = 10,
+      country,
+      state,
+      city,
+      area,
+      treeName,
+    } = req.query;
     const skip = (page - 1) * limit;
 
-    const assignments = await TreeAssign.find()
+    const filter = {};
+    if (country) filter.country = country;
+    if (state) filter.state = state;
+    if (city) filter.city = city;
+    if (area) filter.area = area;
+    if (treeName) filter.treeName = treeName;
+
+    const assignments = await TreeAssign.find(filter)
       .populate("treeName", "name")
-      .populate("group", "name") // ← POPULATE GROUP NAME
+      .populate("group", "name")
       .populate("country", "name")
+      .populate("state", "name")
       .populate("city", "name")
       .populate("area", "name")
       .sort({ createdAt: -1 })
       .limit(parseInt(limit))
       .skip(skip);
 
-    const total = await TreeAssign.countDocuments();
+    const total = await TreeAssign.countDocuments(filter);
 
     res.status(200).json({
       Status: 1,
@@ -118,8 +136,9 @@ const getAssignmentById = async (req, res) => {
         path: "group",
         select: "name users",
         populate: { path: "users", select: "firstName lastName email mobile" },
-      }) // ← POPULATE GROUP WITH USERS
+      })
       .populate("country", "name")
+      .populate("state", "name")
       .populate("city", "name")
       .populate("area", "name")
       .populate("assignedBy", "firstName lastName");
