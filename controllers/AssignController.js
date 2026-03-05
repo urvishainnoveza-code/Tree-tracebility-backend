@@ -117,7 +117,7 @@ const getAllAssignments = async (req, res) => {
 
     const assignments = await TreeAssign.find(filter)
       .populate("treeName", "name")
-      .populate("group", "name") // ← POPULATE GROUP NAME
+      .populate("group", "name")
       .populate("country", "name")
       .populate("state", "name")
       .populate("city", "name")
@@ -149,7 +149,7 @@ const getAssignmentById = async (req, res) => {
         path: "group",
         select: "name users",
         populate: { path: "users", select: "firstName lastName email mobile" },
-      }) // ← POPULATE GROUP WITH USERS
+      })
       .populate("country", "name")
       .populate("state", "name")
       .populate("city", "name")
