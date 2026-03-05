@@ -115,6 +115,14 @@ const createTreePlantation = async (req, res) => {
       });
     }
 
+    // Check if assignment is cancelled
+    if (assignment.status === "cancelled") {
+      return res.status(400).json({
+        Status: 0,
+        Message: "Cannot plant trees for a cancelled assignment",
+      });
+    }
+
     // Authorization Check
     if (req.user.role?.name !== "superAdmin") {
       const userGroups = await Group.find({ users: req.user._id }).select(
