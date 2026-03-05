@@ -1,6 +1,8 @@
 const TreeAssign = require("../models/TreeAssign");
 const Group = require("../models/Group");
 const Area = require("../models/Area");
+const TreePlantation = require("../models/TreePlantation");
+const { createNotification } = require("./NotificationController");
 const mongoose = require("mongoose");
 
 const getUserGroupIds = async (userId) => {
@@ -17,7 +19,7 @@ const createAssignment = async (req, res) => {
     const { treeName, count, country, state, city, area, group, address } =
       req.body;
 
-    if (!treeName || !count || !country || !city || !area) {
+    if (!treeName || !count || !country || !state || !city || !area) {
       return res.status(400).json({
         Status: 0,
         Message: "Missing required fields",
@@ -68,6 +70,27 @@ const createAssignment = async (req, res) => {
       { path: "assignedBy", select: "firstName lastName" },
     ]);
 
+    // Create notification for group members
+    try {
+      const group = await Group.findById(assignedGroupId).populate("users");
+      if (group?.users?.length > 0) {
+        const treeName = assignment.treeName?.name || "Tree";
+        const areaName = assignment.area?.name || "your area";
+        const message = `New tree assignment: ${count} ${treeName}s assigned in ${areaName}`;
+        const recipients = group.users.map((u) => u._id);
+
+        await createNotification({
+          group: assignedGroupId,
+          message,
+          recipients,
+          relatedId: assignment._id,
+          type: "assignTree",
+        });
+      }
+    } catch (notifError) {
+      console.error("Notification error:", notifError.message);
+    }
+
     res.status(201).json({
       Status: 1,
       Message: "Tree assigned successfully",
@@ -83,23 +106,14 @@ const createAssignment = async (req, res) => {
 // GET ALL ASSIGNMENTS
 const getAllAssignments = async (req, res) => {
   try {
-    const {
-      page = 1,
-      limit = 10,
-      country,
-      state,
-      city,
-      area,
-      treeName,
-    } = req.query;
+    const { page = 1, limit = 10, treeName } = req.query;
     const skip = (page - 1) * limit;
 
+    // Build filter query
     const filter = {};
-    if (country) filter.country = country;
-    if (state) filter.state = state;
-    if (city) filter.city = city;
-    if (area) filter.area = area;
-    if (treeName) filter.treeName = treeName;
+    if (treeName) {
+      filter.treeName = treeName;
+    }
 
     const assignments = await TreeAssign.find(filter)
       .populate("treeName", "name")
@@ -116,7 +130,7 @@ const getAllAssignments = async (req, res) => {
 
     res.status(200).json({
       Status: 1,
-      data: assignments, // ← lowercase 'data'
+      data: assignments,
       totalPages: Math.ceil(total / limit),
       totalRecords: total,
     });
@@ -127,7 +141,6 @@ const getAllAssignments = async (req, res) => {
     });
   }
 };
-// GET ASSIGNMENT BY ID
 const getAssignmentById = async (req, res) => {
   try {
     const assignment = await TreeAssign.findById(req.params.id)
@@ -201,30 +214,84 @@ const completeTreeAssign = async (req, res) => {
 const cancelTreeAssign = async (req, res) => {
   try {
     const assignId = req.params.id;
-    const updated = await TreeAssign.findByIdAndUpdate(
-      assignId,
-      { status: "cancelled" },
-      { new: true },
-    ).populate("treeName group");
-    if (!updated) {
+
+    if (!mongoose.Types.ObjectId.isValid(assignId)) {
+      return res.status(400).json({
+        Status: 0,
+        Message: "Invalid assignment ID",
+      });
+    }
+
+    const assignment = await TreeAssign.findById(assignId);
+    if (!assignment) {
       return res.status(404).json({
         Status: 0,
         Message: "Assignment not found",
       });
     }
+
+    if (assignment.status === "cancelled") {
+      return res.status(400).json({
+        Status: 0,
+        Message: "Assignment is already cancelled",
+      });
+    }
+
+    // Get planted count before cancelling
+    const plantations = await TreePlantation.find({ assign: assignId });
+    const plantedCount = plantations.reduce(
+      (sum, p) => sum + p.plantedCount,
+      0,
+    );
+
+    // Detach plantations (make them independent)
+    if (plantations.length > 0) {
+      await TreePlantation.updateMany(
+        { assign: assignId },
+        { $set: { assign: null } },
+      );
+    }
+
+    // Set status to cancelled
+    assignment.status = "cancelled";
+    await assignment.save();
+
+    // Send notifications to all group users
+    try {
+      const populatedAssignment =
+        await TreeAssign.findById(assignId).populate("treeName");
+      const group = await Group.findById(assignment.group).populate("users");
+
+      if (group?.users?.length > 0) {
+        const treeName = populatedAssignment.treeName?.name || "Tree";
+        const message = `${treeName} assignment has been cancelled. ${plantedCount > 0 ? `${plantedCount} trees already planted are saved as independent records.` : ""}`;
+        const recipients = group.users.map((u) => u._id);
+
+        await createNotification({
+          group: group._id,
+          message,
+          recipients,
+          relatedId: assignment._id,
+          type: "cancelAssign",
+        });
+      }
+    } catch (notifError) {
+      console.error("Notification error:", notifError.message);
+      // Don't fail cancellation if notification fails
+    }
+
     return res.json({
       Status: 1,
-      Message: "Tree assignment cancelled",
-      Data: updated,
+      Message: `Assignment cancelled. ${plantedCount} trees saved as independent.`,
+      Data: assignment,
     });
   } catch (error) {
     return res.status(500).json({
       Status: 0,
-      Message: "Error updating assignment status",
+      Message: "Error cancelling assignment",
     });
   }
 };
-
 module.exports = {
   createAssignment,
   getAllAssignments,
