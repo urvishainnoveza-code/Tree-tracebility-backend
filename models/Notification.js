@@ -17,7 +17,7 @@ const NotificationSchema = new mongoose.Schema(
     },
 
     recipients: [
-      //group user
+      //Users who will receive notification
       {
         type: mongoose.Schema.Types.ObjectId,
         ref: "User",
@@ -30,7 +30,7 @@ const NotificationSchema = new mongoose.Schema(
         type: mongoose.Schema.Types.ObjectId,
         ref: "User",
       },
-    ],
+    ],  
 
     relatedId: {
       type: mongoose.Schema.Types.ObjectId,
