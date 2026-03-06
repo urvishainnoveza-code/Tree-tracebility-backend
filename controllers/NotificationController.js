@@ -34,6 +34,7 @@ const getNotifications = async (req, res) => {
     const skip = (page - 1) * limit;
     const notifications = await Notification.find({
       recipients: req.user._id,
+      readBy: { $ne: req.user._id },
     })
       .sort({ createdAt: -1 })
       .skip(skip)
@@ -101,9 +102,28 @@ const markAsRead = async (req, res) => {
     });
   }
 };
+const markAllRead = async (req, res) => {
+  try {
+    await Notification.updateMany(
+      { recipients: req.user._id, readBy: { $ne: req.user._id } },
+      { $addToSet: { readBy: req.user._id } },
+    );
+
+    res.status(200).json({
+      Status: 1,
+      Message: "All notifications marked as read",
+    });
+  } catch (error) {
+    res.status(500).json({
+      Status: 0,
+      Message: error.message,
+    });
+  }
+};
 
 module.exports = {
   createNotification,
   getNotifications,
   markAsRead,
+  markAllRead,
 };

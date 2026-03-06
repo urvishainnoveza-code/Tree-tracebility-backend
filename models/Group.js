@@ -22,7 +22,7 @@ groupSchema.pre(/^find/, function () {
   this.populate({
     path: "users",
     match: { isdeleted: false }, // filter out deleted users
-    select: "firstName lastName email _id",
+    select: "firstName lastName email _id phoneNo",
   });
 });
 
