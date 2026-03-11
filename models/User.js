@@ -48,7 +48,8 @@ const userSchema = new mongoose.Schema(
         default: "Point",
       },
       coordinates: {
-        type: [Number],
+        type: [Number], // [longitude, latitude]
+        default: [0, 0],
       },
     },
 
@@ -117,13 +118,6 @@ userSchema.methods.comparePassword = async function (candidatePassword) {
 };
 
 module.exports = mongoose.model("User", userSchema);
-
-
-
-
-
-
-
 
 /*const assignTree = async (req, res) => {
   try {
