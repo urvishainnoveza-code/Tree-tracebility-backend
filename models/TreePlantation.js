@@ -59,9 +59,31 @@ const treePlantationSchema = new mongoose.Schema(
       type: Date,
       default: Date.now,
     },
+
+    lastWateredDate: {
+      type: Date,
+      default: null,
+    },
+    lastFertilizerDate: {
+      type: Date,
+      default: null,
+    },
+    location: {
+      type: {
+        type: String,
+        enum: ["Point"],
+        default: "Point",
+      },
+      coordinates: {
+        type: [Number], // [longitude, latitude]
+        default: [0, 0],
+      },
+    },
   },
   { timestamps: true },
 );
+treePlantationSchema.index({ location: "2dsphere" });
+
 treePlantationSchema.pre(/^find/, function () {
   this.populate({
     path: "assign",

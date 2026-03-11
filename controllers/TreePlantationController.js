@@ -4,20 +4,32 @@ const TreeAssign = require("../models/TreeAssign");
 const Group = require("../models/Group");
 const cron = require("node-cron");
 
+// Calculate distance between two coordinates (meters)
+/*function calculateDistanceMeters(lat1, lon1, lat2, lon2) {
+  const R = 6371000;
+  const toRad = (deg) => (deg * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRad(lat1)) *
+      Math.cos(toRad(lat2)) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}*/
 const calculateAgeReadable = (plantationDate) => {
   const now = new Date();
   const planted = new Date(plantationDate);
-
   let years = now.getFullYear() - planted.getFullYear();
   let months = now.getMonth() - planted.getMonth();
   let days = now.getDate() - planted.getDate();
-
   if (days < 0) {
     months -= 1;
     const prevMonth = new Date(now.getFullYear(), now.getMonth(), 0);
     days += prevMonth.getDate();
   }
-
   if (months < 0) {
     years -= 1;
     months += 12;
@@ -27,11 +39,10 @@ const calculateAgeReadable = (plantationDate) => {
   if (months > 0) parts.push(`${months} month${months > 1 ? "s" : ""}`);
   if (days > 0 || parts.length === 0)
     parts.push(`${days} day${days > 1 ? "s" : ""}`);
-
   return parts.join(" ");
 };
 
-// Cron job to update ages daily at midnight IST
+// Cron job to update ages daily at night
 cron.schedule(
   "0 0 * * *",
   async () => {
@@ -81,7 +92,22 @@ const createTreePlantation = async (req, res) => {
       fertilizerDetail,
       healthStatus,
       age,
+      latitude,
+      longitude,
     } = req.body;
+
+    // Validate location
+    if (
+      latitude == null ||
+      longitude == null ||
+      isNaN(latitude) ||
+      isNaN(longitude)
+    ) {
+      return res.status(400).json({
+        Status: 0,
+        Message: "Latitude and longitude are required and must be numbers",
+      });
+    }
 
     if (!req.user) {
       return res.status(401).json({
@@ -108,6 +134,13 @@ const createTreePlantation = async (req, res) => {
 
     //check assign tree is exist
     const assignment = await TreeAssign.findById(assign);
+    if (!assignment) {
+      return res.status(404).json({
+        Status: 0,
+        Message: "Assignment not found",
+      });
+    }
+
     if (!assignment) {
       return res.status(404).json({
         Status: 0,
@@ -146,6 +179,30 @@ const createTreePlantation = async (req, res) => {
           Message: "You are not authorized to plant trees for this group",
         });
       }
+    }
+    // Round coordinates to 6 decimals for GPS stability
+    const lat = Number(parseFloat(latitude).toFixed(6));
+    const lng = Number(parseFloat(longitude).toFixed(6));
+
+    // Prevent duplicate plantation at same spot (any user, any assignment)
+    const TREE_MIN_DISTANCE = 3; // meters
+    const nearbyTrees = await TreePlantation.find({
+      assign: assignment._id,
+      location: {
+        $near: {
+          $geometry: {
+            type: "Point",
+            coordinates: [lng, lat],
+          },
+          $maxDistance: TREE_MIN_DISTANCE,
+        },
+      },
+    });
+    if (nearbyTrees.length > 0) {
+      return res.status(400).json({
+        Status: 0,
+        Message: `A tree already exists within ${TREE_MIN_DISTANCE} meters of this location`,
+      });
     }
 
     // Check plantation limit
@@ -186,8 +243,11 @@ const createTreePlantation = async (req, res) => {
       healthStatus: healthStatus || "planted",
       images: imagePaths,
       plantationDate,
-
       age: calculateAgeReadable(plantationDate),
+      location: {
+        type: "Point",
+        coordinates: [Number(longitude), Number(latitude)],
+      },
     });
 
     // Update Assignment Count
@@ -204,6 +264,10 @@ const createTreePlantation = async (req, res) => {
       Status: 1,
       Message: "Tree plantation created successfully",
       Plantation: populatedPlantation,
+      Location: {
+        latitude,
+        longitude,
+      },
     });
   } catch (error) {
     console.error("Tree Plantation Error:", error.message);
@@ -223,24 +287,59 @@ const getAllTreePlantations = async (req, res) => {
 
     const { treeName, user } = req.query;
 
-    let plantations = await TreePlantation.find()
-      .populate({
-        path: "assign",
-        populate: [
-          { path: "treeName", select: "name" },
-          { path: "country", select: "name" },
-          { path: "state", select: "name" },
-          { path: "city", select: "name" },
-          { path: "area", select: "name" },
-          { path: "group", select: "_id name" },
-          { path: "assignedBy", select: "firstName lastName" },
-        ],
+    let plantations;
+    if (req.user.role?.name === "superAdmin") {
+      // SuperAdmin: show all plantations
+      plantations = await TreePlantation.find()
+        .populate({
+          path: "assign",
+          populate: [
+            { path: "treeName", select: "name" },
+            { path: "country", select: "name" },
+            { path: "state", select: "name" },
+            { path: "city", select: "name" },
+            { path: "area", select: "name" },
+            { path: "address", select: "address" },
+            { path: "group", select: "_id name" },
+            { path: "assignedBy", select: "firstName lastName" },
+          ],
+        })
+        .populate({
+          path: "plantedBy",
+          select: "firstName lastName email",
+        })
+        .sort({ plantationDate: -1 });
+    } else {
+      // Regular user: show plantations for their group(s)
+      const userGroups = await Group.find({ users: req.user._id }).select(
+        "_id",
+      );
+      const groupIds = userGroups.map((g) => g._id);
+      const assignments = await TreeAssign.find({
+        group: { $in: groupIds },
+      }).select("_id");
+      const assignmentIds = assignments.map((a) => a._id);
+      plantations = await TreePlantation.find({
+        assign: { $in: assignmentIds },
       })
-      .populate({
-        path: "plantedBy",
-        select: "firstName lastName email",
-      })
-      .sort({ plantationDate: -1 });
+        .populate({
+          path: "assign",
+          populate: [
+            { path: "treeName", select: "name" },
+            { path: "country", select: "name" },
+            { path: "state", select: "name" },
+            { path: "city", select: "name" },
+            { path: "area", select: "name" },
+            { path: "group", select: "_id name" },
+            { path: "assignedBy", select: "firstName lastName" },
+          ],
+        })
+        .populate({
+          path: "plantedBy",
+          select: "firstName lastName email",
+        })
+        .sort({ plantationDate: -1 });
+    }
 
     // filter by tree name
     if (treeName) {
@@ -368,6 +467,17 @@ const getTreePlantationById = async (req, res) => {
 //update plantation
 
 const updateTreePlantation = async (req, res) => {
+  const { latitude, longitude } = req.body;
+  const edit_field = [
+    "cage",
+    "watering",
+    "fertilizer",
+    "fertilizerDetail",
+    "images",
+  ];
+  const isProximityEdit = edit_field.some(
+    (field) => req.body[field] !== undefined,
+  );
   try {
     const plantationId = req.params.id;
 
@@ -388,6 +498,36 @@ const updateTreePlantation = async (req, res) => {
       return res
         .status(404)
         .json({ Status: 0, Message: "Plantation not found" });
+    }
+
+    // GPS proximity validation (after plantation is defined)
+    if (isProximityEdit && (!latitude || !longitude)) {
+      return res.status(400).json({
+        Status: 0,
+        Message: "Current location required to update plantation",
+      });
+    }
+    if (isProximityEdit) {
+      // Use MongoDB $near for proximity check
+      const nearbyTree = await TreePlantation.findOne({
+        _id: plantationId,
+        location: {
+          $near: {
+            $geometry: {
+              type: "Point",
+              coordinates: [Number(longitude), Number(latitude)],
+            },
+            $maxDistance: 30,
+          },
+        },
+      });
+      if (!nearbyTree) {
+        return res.status(403).json({
+          Status: 0,
+          Message:
+            "You must be within 30 meters of the tree to update these details",
+        });
+      }
     }
 
     const isSuperAdmin = req.user.role?.name === "superAdmin";
@@ -425,6 +565,21 @@ const updateTreePlantation = async (req, res) => {
         plantation[field] = ["cage", "watering", "fertilizer"].includes(field)
           ? req.body[field] === "true" || req.body[field] === true
           : req.body[field];
+
+        // Set lastWateredDate if watering is updated
+        if (
+          field === "watering" &&
+          (req.body[field] === "true" || req.body[field] === true)
+        ) {
+          plantation.lastWateredDate = new Date();
+        }
+        // Set lastFertilizerDate if fertilizer is updated
+        if (
+          field === "fertilizer" &&
+          (req.body[field] === "true" || req.body[field] === true)
+        ) {
+          plantation.lastFertilizerDate = new Date();
+        }
       }
     });
 

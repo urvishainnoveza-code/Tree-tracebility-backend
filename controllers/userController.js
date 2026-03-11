@@ -154,7 +154,8 @@ const createUser = async (req, res) => {
 // Signup user
 const signupUser = async (req, res) => {
   try {
-    const { firstName, lastName, email, phoneNo } = req.body;
+    const { firstName, lastName, email, phoneNo, latitude, longitude } =
+      req.body;
 
     if (!firstName || !lastName || !email || !phoneNo) {
       return res.status(400).json({
@@ -202,6 +203,13 @@ const signupUser = async (req, res) => {
       phoneNo,
       role: defaultRole._id,
       emailVerified: true, // Auto-verify on signup since they get token immediately
+      location:
+        latitude && longitude
+          ? {
+              type: "Point",
+              coordinates: [Number(longitude), Number(latitude)],
+            }
+          : undefined,
     });
 
     const userToken = generateToken(newUser._id);
@@ -233,7 +241,7 @@ const signupUser = async (req, res) => {
 
 const loginUser = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, latitude, longitude } = req.body;
 
     if (!email) {
       return res.status(400).json({ Status: 0, Message: "Email is required" });
@@ -242,6 +250,23 @@ const loginUser = async (req, res) => {
     const user = await User.findOne({ email })
       .select("+password +otp")
       .populate("role");
+    // Update user location if provided
+    if (
+      latitude != null &&
+      longitude != null &&
+      !isNaN(latitude) &&
+      !isNaN(longitude)
+    ) {
+      await User.updateOne(
+        { email },
+        {
+          location: {
+            type: "Point",
+            coordinates: [Number(longitude), Number(latitude)],
+          },
+        },
+      );
+    }
 
     if (!user) {
       return res.status(400).json({ Status: 0, Message: "User not found" });
@@ -368,9 +393,9 @@ const getAllUsers = async (req, res) => {
     const skip = (page - 1) * limit;
 
     const filter = {};
- //   if (email) filter.email = email;
-   // if (firstName) filter.firstName = { $regex: firstName, $options: "i" };
-   // if (phoneNo) filter.phoneNo = phoneNo;
+    //   if (email) filter.email = email;
+    // if (firstName) filter.firstName = { $regex: firstName, $options: "i" };
+    // if (phoneNo) filter.phoneNo = phoneNo;
     if (country) filter.country = country;
     if (state) filter.state = state;
     if (city) filter.city = city;
@@ -621,7 +646,7 @@ const updateUser = async (req, res) => {
 
       if (
         !areaData ||
-        !areaData.city || 
+        !areaData.city ||
         !areaData.city.state ||
         !areaData.city.state.country
       ) {
