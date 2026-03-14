@@ -280,118 +280,131 @@ const createTreePlantation = async (req, res) => {
 };
 //get all
 const getAllTreePlantations = async (req, res) => {
-  try {
-    if (!req.user) {
-      return res.status(401).json({ Status: 0, Message: "Unauthorized" });
-    }
+  const { treeName, user, search } = req.query;
+  if (!req.user) {
+    return res.status(401).json({ Status: 0, Message: "Unauthorized" });
+  }
 
-    const { treeName, user } = req.query;
-
-    let plantations;
-    if (req.user.role?.name === "superAdmin") {
-      // SuperAdmin: show all plantations
-      plantations = await TreePlantation.find()
-        .populate({
-          path: "assign",
-          populate: [
-            { path: "treeName", select: "name" },
-            { path: "country", select: "name" },
-            { path: "state", select: "name" },
-            { path: "city", select: "name" },
-            { path: "area", select: "name" },
-            { path: "address", select: "address" },
-            { path: "group", select: "_id name" },
-            { path: "assignedBy", select: "firstName lastName" },
-          ],
-        })
-        .populate({
-          path: "plantedBy",
-          select: "firstName lastName email",
-        })
-        .sort({ plantationDate: -1 });
-    } else {
-      // Regular user: show plantations for their group(s)
-      const userGroups = await Group.find({ users: req.user._id }).select(
-        "_id",
-      );
-      const groupIds = userGroups.map((g) => g._id);
-      const assignments = await TreeAssign.find({
-        group: { $in: groupIds },
-      }).select("_id");
-      const assignmentIds = assignments.map((a) => a._id);
-      plantations = await TreePlantation.find({
-        assign: { $in: assignmentIds },
+  let plantations;
+  if (req.user.role?.name === "superAdmin") {
+    // SuperAdmin: show all plantations
+    plantations = await TreePlantation.find()
+      .populate({
+        path: "assign",
+        populate: [
+          { path: "treeName", select: "name" },
+          { path: "country", select: "name" },
+          { path: "state", select: "name" },
+          { path: "city", select: "name" },
+          { path: "area", select: "name" },
+          { path: "address", select: "address" },
+          { path: "group", select: "_id name" },
+          { path: "assignedBy", select: "firstName lastName" },
+        ],
       })
-        .populate({
-          path: "assign",
-          populate: [
-            { path: "treeName", select: "name" },
-            { path: "country", select: "name" },
-            { path: "state", select: "name" },
-            { path: "city", select: "name" },
-            { path: "area", select: "name" },
-            { path: "group", select: "_id name" },
-            { path: "assignedBy", select: "firstName lastName" },
-          ],
-        })
-        .populate({
-          path: "plantedBy",
-          select: "firstName lastName email",
-        })
-        .sort({ plantationDate: -1 });
-    }
+      .populate({
+        path: "plantedBy",
+        select: "firstName lastName email",
+      })
+      .sort({ plantationDate: -1 });
+  } else {
+    // Regular user: show plantations for their group(s)
+    const userGroups = await Group.find({ users: req.user._id }).select("_id");
+    const groupIds = userGroups.map((g) => g._id);
+    const assignments = await TreeAssign.find({
+      group: { $in: groupIds },
+    }).select("_id");
+    const assignmentIds = assignments.map((a) => a._id);
+    plantations = await TreePlantation.find({
+      assign: { $in: assignmentIds },
+    })
+      .populate({
+        path: "assign",
+        populate: [
+          { path: "treeName", select: "name" },
+          { path: "country", select: "name" },
+          { path: "state", select: "name" },
+          { path: "city", select: "name" },
+          { path: "area", select: "name" },
+          { path: "group", select: "_id name" },
+          { path: "assignedBy", select: "firstName lastName" },
+        ],
+      })
+      .populate({
+        path: "plantedBy",
+        select: "firstName lastName email",
+      })
+      .sort({ plantationDate: -1 });
+  }
 
-    // filter by tree name
-    if (treeName) {
-      plantations = plantations.filter(
-        (p) =>
-          p.assign?.treeName?._id &&
-          p.assign.treeName._id.toString() === treeName,
-      );
-    }
-    //search by user name
-    if (user) {
-      plantations = plantations.filter(
-        (p) =>
-          p.plantedBy &&
-          (p.plantedBy.firstName?.toLowerCase().includes(user.toLowerCase()) ||
-            p.plantedBy.lastName?.toLowerCase().includes(user.toLowerCase())),
-      );
-    }
-    //grop filter for regular users
-    if (req.user.role?.name !== "superAdmin") {
-      const userGroups = await Group.find({ users: req.user._id }).select(
-        "_id",
-      );
-      const userGroupIds = userGroups.map((g) => g._id.toString());
+  // filter by tree name
+  if (treeName) {
+    plantations = plantations.filter(
+      (p) =>
+        p.assign?.treeName?._id &&
+        p.assign.treeName._id.toString() === treeName,
+    );
+  }
+  //search by user name
+  if (user) {
+    plantations = plantations.filter(
+      (p) =>
+        p.plantedBy &&
+        (p.plantedBy.firstName?.toLowerCase().includes(user.toLowerCase()) ||
+          p.plantedBy.lastName?.toLowerCase().includes(user.toLowerCase())),
+    );
+  }
 
-      plantations = plantations.filter(
-        (p) =>
-          p.assign?.group &&
-          userGroupIds.includes(p.assign.group._id.toString()),
-      );
-    }
+  // Flexible search for tree name, planter first/last name, or email
+  if (search) {
+    const searchLower = search.toLowerCase();
+    plantations = plantations.filter((p) => {
+      // Tree name
+      const treeNameMatch =
+        p.assign?.treeName?.name &&
+        p.assign.treeName.name.toLowerCase().includes(searchLower);
 
-    //age calculation
-    plantations = plantations.map((p) => ({
-      ...p.toObject(),
-      age: calculateAgeReadable(p.plantationDate),
-    }));
+      // Planter first name
+      const firstNameMatch =
+        p.plantedBy?.firstName &&
+        p.plantedBy.firstName.toLowerCase().includes(searchLower);
 
-    return res.status(200).json({
-      Status: 1,
-      Message: "Tree plantations fetched successfully",
-      Count: plantations.length,
-      Plantation: plantations,
-    });
-  } catch (error) {
-    console.error("Get Tree Plantations Error:", error);
-    return res.status(500).json({
-      Status: 0,
-      Message: "Internal Server Error",
-      Error: error.message,
+      // Planter last name
+      const lastNameMatch =
+        p.plantedBy?.lastName &&
+        p.plantedBy.lastName.toLowerCase().includes(searchLower);
+
+      // Planter email
+      const emailMatch =
+        p.plantedBy?.email &&
+        p.plantedBy.email.toLowerCase().includes(searchLower);
+
+      return treeNameMatch || firstNameMatch || lastNameMatch || emailMatch;
     });
   }
+  //grop filter for regular users
+  if (req.user.role?.name !== "superAdmin") {
+    const userGroups = await Group.find({ users: req.user._id }).select("_id");
+    const userGroupIds = userGroups.map((g) => g._id.toString());
+
+    plantations = plantations.filter(
+      (p) =>
+        p.assign?.group && userGroupIds.includes(p.assign.group._id.toString()),
+    );
+  }
+
+  //age calculation
+  plantations = plantations.map((p) => ({
+    ...p.toObject(),
+    age: calculateAgeReadable(p.plantationDate),
+  }));
+
+  return res.status(200).json({
+    Status: 1,
+    Message: "Tree plantations fetched successfully",
+    Count: plantations.length,
+    Plantation: plantations,
+  });
 };
 const getTreePlantationById = async (req, res) => {
   try {
