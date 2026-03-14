@@ -106,31 +106,34 @@ const createAssignment = async (req, res) => {
 // GET ALL ASSIGNMENTS
 const getAllAssignments = async (req, res) => {
   try {
-    const { page = 1, limit = 10, treeName } = req.query;
+    const { page = 1, limit = 10, search = "" } = req.query;
     const skip = (page - 1) * limit;
 
-    // Build filter query
-    const filter = {};
-    if (treeName) {
-      filter.treeName = treeName;
-    }
-
-    const assignments = await TreeAssign.find(filter)
+    // Fetch all assignments (add other filters as needed)
+    let assignments = await TreeAssign.find({})
       .populate("treeName", "name")
       .populate("group", "name")
       .populate("country", "name")
       .populate("state", "name")
       .populate("city", "name")
       .populate("area", "name")
-      .sort({ createdAt: -1 })
-      .limit(parseInt(limit))
-      .skip(skip);
+      .sort({ createdAt: -1 });
 
-    const total = await TreeAssign.countDocuments(filter);
+    // Filter by treeName (case-insensitive, partial match)
+    if (search) {
+      const searchLower = search.toLowerCase();
+      assignments = assignments.filter(a =>
+        a.treeName?.name?.toLowerCase().includes(searchLower)
+      );
+    }
+
+    // Pagination after filtering
+    const total = assignments.length;
+    const paginatedAssignments = assignments.slice(skip, skip + parseInt(limit));
 
     res.status(200).json({
       Status: 1,
-      data: assignments,
+      data: paginatedAssignments,
       totalPages: Math.ceil(total / limit),
       totalRecords: total,
     });

@@ -38,6 +38,9 @@ const createUser = async (req, res) => {
       userType = "user",
     } = req.body;
 
+    console.log("FILE:", req.file);
+    console.log("FILE DATA:", req.file);
+
     if (!firstName || !lastName || !email || !area) {
       return res.status(400).json({
         Status: 0,
@@ -52,6 +55,14 @@ const createUser = async (req, res) => {
       return res.status(400).json({
         Status: 0,
         Message: "User already exists",
+      });
+    }
+
+    const existingUserByPhone = await User.findOne({ phoneNo });
+    if (existingUserByPhone) {
+      return res.status(400).json({
+        Status: 0,
+        Message: "User with this phone number already exists",
       });
     }
 
@@ -83,7 +94,10 @@ const createUser = async (req, res) => {
         Message: "Area location hierarchy incomplete",
       });
     }
-
+    let profilePhoto = "";
+    if (req.file) {
+      profilePhoto = req.file.path || req.file.secure_url;
+    }
     const newUser = await User.create({
       firstName,
       lastName,
@@ -101,6 +115,7 @@ const createUser = async (req, res) => {
       role: userRole._id,
       addedBy: req.user._id,
       emailVerified: true,
+      profilePhoto,
     });
 
     let group = await Group.findOne({ area: areaData._id });
@@ -180,8 +195,8 @@ const signupUser = async (req, res) => {
       });
     }
 
-    const existingUserByPhoneNo = await User.findOne({ phoneNo });
-    if (existingUserByPhoneNo) {
+    const existingUserByPhone = await User.findOne({ phoneNo });
+    if (existingUserByPhone) {
       return res.status(400).json({
         Status: 0,
         Message: "User with this phone number already exists",
@@ -615,6 +630,10 @@ const updateUser = async (req, res) => {
     if (landmark !== undefined) updateData.landmark = landmark;
     if (societyName !== undefined) updateData.societyName = societyName;
     if (houseNo !== undefined) updateData.houseNo = houseNo;
+    // Handle profile photo upload
+    if (req.file) {
+      updateData.profilePhoto = req.file.path || req.file.secure_url;
+    }
 
     // Email change validation
     if (email && email !== user.email) {
