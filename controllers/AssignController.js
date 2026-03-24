@@ -106,19 +106,24 @@ const createAssignment = async (req, res) => {
 // GET ALL ASSIGNMENTS
 const getAllAssignments = async (req, res) => {
   try {
-    const { page = 1, limit = 10 } = req.query;
+    const {
+      page = 1,
+      limit = 10,
+      treeName,
+      country,
+      state,
+      city,
+      area,
+    } = req.query;
     const skip = (page - 1) * limit;
 
-    // Build filter query for all possible fields
+    // Build filter query
     const filter = {};
-    if (req.query.treeName) filter.treeName = req.query.treeName;
-    if (req.query.country) filter.country = req.query.country;
-    if (req.query.state) filter.state = req.query.state;
-    if (req.query.city) filter.city = req.query.city;
-    if (req.query.area) filter.area = req.query.area;
-    if (req.query.group) filter.group = req.query.group;
-    if (req.query.status) filter.status = req.query.status;
-    if (req.query.assignedBy) filter.assignedBy = req.query.assignedBy;
+    if (treeName) filter.treeName = treeName;
+    if (country) filter.country = country;
+    if (state) filter.state = state;
+    if (city) filter.city = city;
+    if (area) filter.area = area;
 
     const assignments = await TreeAssign.find(filter)
       .populate("treeName", "name")
@@ -127,23 +132,15 @@ const getAllAssignments = async (req, res) => {
       .populate("state", "name")
       .populate("city", "name")
       .populate("area", "name")
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .limit(parseInt(limit))
+      .skip(skip);
 
-    // Filter by treeName (case-insensitive, partial match)
-    if (search) {
-      const searchLower = search.toLowerCase();
-      assignments = assignments.filter(a =>
-        a.treeName?.name?.toLowerCase().includes(searchLower)
-      );
-    }
-
-    // Pagination after filtering
-    const total = assignments.length;
-    const paginatedAssignments = assignments.slice(skip, skip + parseInt(limit));
+    const total = await TreeAssign.countDocuments(filter);
 
     res.status(200).json({
       Status: 1,
-      data: paginatedAssignments,
+      data: assignments,
       totalPages: Math.ceil(total / limit),
       totalRecords: total,
     });
