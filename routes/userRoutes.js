@@ -11,13 +11,16 @@ const {
   deleteUser,
   updateUser,
 } = require("../controllers/UserController");
-router.post("/", protect, createUser);
+const multer = require("multer");
+const upload = multer();
+
+router.post("/", protect, upload.none(), createUser);
 router.post("/login", loginUser);
 router.post("/signup", signupUser);
 router.get("/", protect, getAllUsers);
 router.get("/:id", protect, getUserById);
 router.post("/verifyOtp", verifyOtp);
-router.delete("/:id", protect, deleteUser); 
+router.delete("/:id", protect, deleteUser);
 router.put("/:id", protect, updateUser);
 
 module.exports = router;

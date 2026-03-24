@@ -11,6 +11,7 @@ const groupRoutes = require("./routes/groupRoutes");
 const assignRoutes = require("./routes/assignRoutes");
 const treePlantationRoutes = require("./routes/treePlantationRoutes");
 const notificationRoutes = require("./routes/notificationRoutes");
+const dashboardRoutes = require("./routes/dashboardRoutes");
 const app = express();
 
 app.use(cors());
@@ -30,6 +31,7 @@ app.use("/api/groups", groupRoutes);
 app.use("/api/assign", assignRoutes);
 app.use("/api/plantation", treePlantationRoutes);
 app.use("/api/notifications", notificationRoutes);
+app.use("/api/dashboard", dashboardRoutes);
 app.use((req, res) => {
   res.status(404).json({
     Status: 0,

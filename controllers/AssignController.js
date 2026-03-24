@@ -106,14 +106,19 @@ const createAssignment = async (req, res) => {
 // GET ALL ASSIGNMENTS
 const getAllAssignments = async (req, res) => {
   try {
-    const { page = 1, limit = 10, treeName } = req.query;
+    const { page = 1, limit = 10 } = req.query;
     const skip = (page - 1) * limit;
 
-    // Build filter query
+    // Build filter query for all possible fields
     const filter = {};
-    if (treeName) {
-      filter.treeName = treeName;
-    }
+    if (req.query.treeName) filter.treeName = req.query.treeName;
+    if (req.query.country) filter.country = req.query.country;
+    if (req.query.state) filter.state = req.query.state;
+    if (req.query.city) filter.city = req.query.city;
+    if (req.query.area) filter.area = req.query.area;
+    if (req.query.group) filter.group = req.query.group;
+    if (req.query.status) filter.status = req.query.status;
+    if (req.query.assignedBy) filter.assignedBy = req.query.assignedBy;
 
     const assignments = await TreeAssign.find(filter)
       .populate("treeName", "name")
