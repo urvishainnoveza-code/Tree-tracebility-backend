@@ -91,6 +91,10 @@ const userSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
     },
+    profilePhoto: {
+      type: String,
+      default: "",
+    },
     isActive: { type: Boolean, default: true },
   },
 

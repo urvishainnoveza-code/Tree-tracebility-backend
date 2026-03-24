@@ -14,7 +14,7 @@ const getDashboard = async (req, res) => {
     }
 
     // SuperAdmin: Global stats
-    if (roleName === "superAdmin") {
+    if (roleName.toLowerCase() === "superadmin") {
       const [
         totalUsers,
         totalTreesPlanted,
@@ -43,6 +43,23 @@ const getDashboard = async (req, res) => {
           { $match: { healthStatus: "diseased" } },
           { $group: { _id: null, total: { $sum: "$plantedCount" } } },
         ]).then((r) => r[0]?.total || 0),
+          { $group: { _id: null, total: { $sum: "$plantedCount" } } }
+        ]).then(r => r[0]?.total || 0),
+        TreeAssign.aggregate([
+          { $group: { _id: null, total: { $sum: "$count" } } },
+        ]).then(r => r[0]?.total || 0),
+        TreePlantation.aggregate([
+          { $match: { healthStatus: "healthy" } },
+          { $group: { _id: null, total: { $sum: "$plantedCount" } } }
+        ]).then(r => r[0]?.total || 0),
+        TreePlantation.aggregate([
+          { $match: { healthStatus: "dead" } },
+          { $group: { _id: null, total: { $sum: "$plantedCount" } } }
+        ]).then(r => r[0]?.total || 0),
+        TreePlantation.aggregate([
+          { $match: { healthStatus: "diseased" } },
+          { $group: { _id: null, total: { $sum: "$plantedCount" } } }
+        ]).then(r => r[0]?.total || 0),
         Notification.find({})
           .sort({ createdAt: -1 })
           .limit(5)
@@ -73,6 +90,25 @@ const getDashboard = async (req, res) => {
     ]);
     const totalAssignedTrees = assignedTreesAgg[0]?.total || 0;
 
+        mode: "superadmin"
+      });
+    }
+
+    // User/Group dashboard
+    const group = await Group.findOne({ users: req.user._id });
+    if (!group) return res.status(404).json({ error: "Group not found" });
+
+    // Group members
+    const groupMembers = group.users;
+
+    // Assigned trees in this group
+    const assignedTreesAgg = await TreeAssign.aggregate([
+      { $match: { group: group._id } },
+      { $group: { _id: null, total: { $sum: "$count" } } }
+    ]);
+    const totalAssignedTrees = assignedTreesAgg[0]?.total || 0;
+
+    // Planted trees in this group (sum plantedCount via $lookup)
     const plantedTreesAgg = await TreePlantation.aggregate([
       {
         $lookup: {
@@ -119,6 +155,8 @@ const getDashboard = async (req, res) => {
           foreignField: "_id",
           as: "assignObj",
         },
+          as: "assignObj"
+        }
       },
       { $unwind: "$assignObj" },
       { $match: { "assignObj.group": group._id } },
