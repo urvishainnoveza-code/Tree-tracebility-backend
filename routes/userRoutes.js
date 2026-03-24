@@ -12,8 +12,6 @@ const {
   deleteUser,
   updateUser,
 } = require("../controllers/UserController");
-const multer = require("multer");
-const upload = multer();
 
 router.post("/", protect, upload.none(), createUser);
 router.post("/login", loginUser);
