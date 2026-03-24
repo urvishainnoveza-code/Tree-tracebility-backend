@@ -12,7 +12,6 @@ const {
   deleteUser,
   updateUser,
 } = require("../controllers/UserController");
-
 router.post("/", protect, upload.none(), createUser);
 router.post("/login", loginUser);
 router.post("/signup", signupUser);

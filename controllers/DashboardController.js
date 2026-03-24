@@ -6,10 +6,15 @@ const Notification = require("../models/Notification");
 
 const getDashboard = async (req, res) => {
   try {
-        // Defensive: handle both populated and unpopulated role, case-insensitive
+    // Validate user role and type
     const roleName = req.user.role?.name || req.user.role;
-    if (roleName && roleName === "superAdmin") {
-      // SuperAdmin: Global stats
+    const userType = req.user.type || null;
+    if (!roleName) {
+      return res.status(400).json({ error: "User role is missing or invalid" });
+    }
+
+    // SuperAdmin: Global stats
+    if (roleName.toLowerCase() === "superadmin") {
       const [
         totalUsers,
         totalTreesPlanted,
@@ -21,23 +26,23 @@ const getDashboard = async (req, res) => {
       ] = await Promise.all([
         User.countDocuments(),
         TreePlantation.aggregate([
-          { $group: { _id: null, total: { $sum: "$plantedCount" } } },
-        ]).then((r) => r[0]?.total || 0),
+          { $group: { _id: null, total: { $sum: "$plantedCount" } } }
+        ]).then(r => r[0]?.total || 0),
         TreeAssign.aggregate([
           { $group: { _id: null, total: { $sum: "$count" } } },
-        ]).then((r) => r[0]?.total || 0),
+        ]).then(r => r[0]?.total || 0),
         TreePlantation.aggregate([
           { $match: { healthStatus: "healthy" } },
-          { $group: { _id: null, total: { $sum: "$plantedCount" } } },
-        ]).then((r) => r[0]?.total || 0),
+          { $group: { _id: null, total: { $sum: "$plantedCount" } } }
+        ]).then(r => r[0]?.total || 0),
         TreePlantation.aggregate([
           { $match: { healthStatus: "dead" } },
-          { $group: { _id: null, total: { $sum: "$plantedCount" } } },
-        ]).then((r) => r[0]?.total || 0),
+          { $group: { _id: null, total: { $sum: "$plantedCount" } } }
+        ]).then(r => r[0]?.total || 0),
         TreePlantation.aggregate([
           { $match: { healthStatus: "diseased" } },
-          { $group: { _id: null, total: { $sum: "$plantedCount" } } },
-        ]).then((r) => r[0]?.total || 0),
+          { $group: { _id: null, total: { $sum: "$plantedCount" } } }
+        ]).then(r => r[0]?.total || 0),
         Notification.find({})
           .sort({ createdAt: -1 })
           .limit(5)
@@ -53,7 +58,7 @@ const getDashboard = async (req, res) => {
         deadTrees,
         diseasedTrees,
         recentActivities,
-        mode: "superAdmin",
+        mode: "superadmin"
       });
     }
 
@@ -67,7 +72,7 @@ const getDashboard = async (req, res) => {
     // Assigned trees in this group
     const assignedTreesAgg = await TreeAssign.aggregate([
       { $match: { group: group._id } },
-      { $group: { _id: null, total: { $sum: "$count" } } },
+      { $group: { _id: null, total: { $sum: "$count" } } }
     ]);
     const totalAssignedTrees = assignedTreesAgg[0]?.total || 0;
 
@@ -78,12 +83,12 @@ const getDashboard = async (req, res) => {
           from: "treeassigns",
           localField: "assign",
           foreignField: "_id",
-          as: "assignObj",
-        },
+          as: "assignObj"
+        }
       },
       { $unwind: "$assignObj" },
       { $match: { "assignObj.group": group._id } },
-      { $group: { _id: null, total: { $sum: "$plantedCount" } } },
+      { $group: { _id: null, total: { $sum: "$plantedCount" } } }
     ]);
     const totalPlantedTrees = plantedTreesAgg[0]?.total || 0;
 
@@ -97,12 +102,12 @@ const getDashboard = async (req, res) => {
             from: "treeassigns",
             localField: "assign",
             foreignField: "_id",
-            as: "assignObj",
-          },
+            as: "assignObj"
+          }
         },
         { $unwind: "$assignObj" },
         { $match: { "assignObj.group": group._id, healthStatus: status } },
-        { $group: { _id: null, total: { $sum: "$plantedCount" } } },
+        { $group: { _id: null, total: { $sum: "$plantedCount" } } }
       ]);
       healthChart[status] = agg[0]?.total || 0;
     }
@@ -116,8 +121,8 @@ const getDashboard = async (req, res) => {
           from: "treeassigns",
           localField: "assign",
           foreignField: "_id",
-          as: "assignObj",
-        },
+          as: "assignObj"
+        }
       },
       { $unwind: "$assignObj" },
       { $match: { "assignObj.group": group._id } },
@@ -128,8 +133,8 @@ const getDashboard = async (req, res) => {
           from: "treenames",
           localField: "assignObj.treeName",
           foreignField: "_id",
-          as: "treeNameObj",
-        },
+          as: "treeNameObj"
+        }
       },
       { $unwind: "$treeNameObj" },
       {
@@ -138,17 +143,14 @@ const getDashboard = async (req, res) => {
           plantationDate: 1,
           healthStatus: 1,
           plantedCount: 1,
-          treeName: "$treeNameObj.name",
-          images: "$images",
-        },
-      },
+          "treeName": "$treeNameObj.name"
+        }
+      }
     ]);
 
     // Group member details
     const members = await User.find({ _id: { $in: groupMembers } })
-      .select(
-        "firstName lastName email phoneNo isActive country state city area role addedBy",
-      )
+      .select("firstName lastName email phoneNo isActive country state city area role addedBy")
       .lean();
 
     res.json({
@@ -159,7 +161,7 @@ const getDashboard = async (req, res) => {
       topTrees,
       healthChart,
       members,
-      mode: "user",
+      mode: "user"
     });
   } catch (error) {
     res.status(500).json({ error: "Failed to fetch dashboard data" });
