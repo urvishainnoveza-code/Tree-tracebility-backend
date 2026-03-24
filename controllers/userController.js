@@ -54,16 +54,19 @@ const createUser = async (req, res) => {
     if (existingUser) {
       return res.status(400).json({
         Status: 0,
-        Message: "User already exists",
+        Message: "User with this email already exists",
       });
     }
 
-    const existingUserByPhone = await User.findOne({ phoneNo });
-    if (existingUserByPhone) {
-      return res.status(400).json({
-        Status: 0,
-        Message: "User with this phone number already exists",
-      });
+    // Check for existing user by phoneNo
+    if (phoneNo) {
+      const existingUserByPhone = await User.findOne({ phoneNo });
+      if (existingUserByPhone) {
+        return res.status(400).json({
+          Status: 0,
+          Message: "User with this phone number already exists",
+        });
+      }
     }
 
     const [userRole, areaData] = await Promise.all([
