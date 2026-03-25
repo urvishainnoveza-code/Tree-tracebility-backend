@@ -184,10 +184,11 @@ const createTreePlantation = async (req, res) => {
     const lat = Number(parseFloat(latitude).toFixed(6));
     const lng = Number(parseFloat(longitude).toFixed(6));
 
-    // Prevent duplicate plantation at same spot (any user, any assignment)
+    // Prevent duplicate plantation at same spot by the same user for the same assignment
     const TREE_MIN_DISTANCE = 3; // meters
-    const nearbyTrees = await TreePlantation.find({
+    const duplicateTree = await TreePlantation.findOne({
       assign: assignment._id,
+      plantedBy: req.user._id,
       location: {
         $near: {
           $geometry: {
@@ -198,10 +199,10 @@ const createTreePlantation = async (req, res) => {
         },
       },
     });
-    if (nearbyTrees.length > 0) {
+    if (duplicateTree) {
       return res.status(400).json({
         Status: 0,
-        Message: `A tree already exists within ${TREE_MIN_DISTANCE} meters of this location`,
+        Message: `You have already planted a tree within ${TREE_MIN_DISTANCE} meters of this location for this assignment`,
       });
     }
 
