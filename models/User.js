@@ -3,6 +3,11 @@ const bcrypt = require("bcryptjs");
 
 const userSchema = new mongoose.Schema(
   {
+    userType: {
+      type: String,
+      enum: ["user", "donor"], // user = field staff, donor = donor
+      default: "user",
+    },
     firstName: { type: String, trim: true },
     lastName: { type: String, trim: true },
 

@@ -172,7 +172,7 @@ const createUser = async (req, res) => {
 // Signup user
 const signupUser = async (req, res) => {
   try {
-    const { firstName, lastName, email, phoneNo, latitude, longitude } =
+    const { firstName, lastName, email, phoneNo, latitude, longitude, type } =
       req.body;
 
     if (!firstName || !lastName || !email || !phoneNo) {
@@ -206,11 +206,17 @@ const signupUser = async (req, res) => {
       });
     }
 
-    const defaultRole = await Role.findOne({ default: true });
-    if (!defaultRole) {
+    let roleToAssign;
+    if (type === "donor") {
+      roleToAssign = await Role.findOne({ name: "donor" });
+    } else {
+      roleToAssign = await Role.findOne({ default: true, name: "user" });
+    }
+
+    if (!roleToAssign) {
       return res.status(500).json({
         Status: 0,
-        Message: "No default role found. Contact admin.",
+        Message: "Role configuration error. Contact admin.",
       });
     }
 
@@ -219,7 +225,8 @@ const signupUser = async (req, res) => {
       lastName,
       email: email.toLowerCase().trim(),
       phoneNo,
-      role: defaultRole._id,
+      role: roleToAssign._id,
+      userType: type || "user", // Save the type explicitly
       emailVerified: true, // Auto-verify on signup since they get token immediately
       location:
         latitude && longitude

@@ -260,6 +260,15 @@ const createTreePlantation = async (req, res) => {
 
     await assignment.save();
 
+    // If assignment is completed, update linked donation status
+    if (assignment.status === "completed") {
+      const Donation = require("../models/Donation");
+      await Donation.findOneAndUpdate(
+        { assignment: assignment._id },
+        { status: "completed" },
+      );
+    }
+
     const populatedPlantation = await TreePlantation.findById(plantation._id);
     return res.status(201).json({
       Status: 1,

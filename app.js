@@ -12,6 +12,8 @@ const assignRoutes = require("./routes/assignRoutes");
 const treePlantationRoutes = require("./routes/treePlantationRoutes");
 const notificationRoutes = require("./routes/notificationRoutes");
 const dashboardRoutes = require("./routes/dashboardRoutes");
+
+const donationRoutes = require("./routes/donationRoutes");
 const app = express();
 
 app.use(cors());
@@ -32,6 +34,7 @@ app.use("/api/assign", assignRoutes);
 app.use("/api/plantation", treePlantationRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/dashboard", dashboardRoutes);
+app.use("/api/donations", donationRoutes);
 app.use((req, res) => {
   res.status(404).json({
     Status: 0,
