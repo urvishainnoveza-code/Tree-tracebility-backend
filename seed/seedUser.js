@@ -1,6 +1,6 @@
 const mongoose = require("mongoose");
 const path = require("path");
-vrequire("dotenv").config({ path: path.resolve(__dirname, "..", ".env") });
+require("dotenv").config({ path: path.resolve(__dirname, "..", ".env") });
 const connectDB = require("../config/db");
 
 const User = require("../models/User");
@@ -30,11 +30,23 @@ async function seedsuperAdmin() {
       userRole = await Role.create({
         name: "user",
         default: true,
-        description: "Normal user role",
+        description: "Field Staff",
       });
       console.log("user role created");
     } else {
       console.log("user role already exists");
+    }
+
+    let donorRole = await Role.findOne({ name: "donor" });
+    if (!donorRole) {
+      donorRole = await Role.create({
+        name: "donor",
+        default: false,
+        description: "Donor who donates money or items",
+      });
+      console.log("Donor role created");
+    } else {
+      console.log("Donor role already exists");
     }
 
     const email = "superAdmin@gmail.com";

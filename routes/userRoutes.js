@@ -19,6 +19,6 @@ router.get("/", protect, getAllUsers);
 router.get("/:id", protect, getUserById);
 router.post("/verifyOtp", verifyOtp);
 router.delete("/:id", protect, deleteUser);
-router.put("/:id", protect, updateUser);
+router.put("/:id", protect, upload.none(), updateUser);
 
 module.exports = router;
