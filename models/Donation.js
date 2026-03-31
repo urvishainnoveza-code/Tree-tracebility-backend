@@ -7,16 +7,15 @@ const donationSchema = new mongoose.Schema(
       ref: "User",
       required: true,
     },
-    amount: { type: Number }, // For money
-    quantity: { type: Number, required: true, default: 1 }, // For trees/items
-    treename: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "TreeName",
-      required: true,
-    },
+    amount: { type: Number },
+    quantity: { type: Number, required: true, default: 1 },
     assignment: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "TreeAssign",
+    },
+    cage: {
+      type: Boolean,
+      default: false,
     },
     status: {
       type: String,
@@ -27,10 +26,10 @@ const donationSchema = new mongoose.Schema(
   { timestamps: true },
 );
 donationSchema.pre(/^find/, function () {
-  this.populate("donor", "firstName lastName email phoneNo")
-    .populate("treename", "name")
+  this.populate("donor", "firstName lastName email phoneNo").populate(
+    "assignment",
+    "treeName country state city area address status",
+  );
 });
-
-
 
 module.exports = mongoose.model("Donation", donationSchema);
