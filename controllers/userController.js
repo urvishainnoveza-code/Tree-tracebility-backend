@@ -123,18 +123,21 @@ const createUser = async (req, res) => {
 
     let group = await Group.findOne({ area: areaData._id });
 
-    if (!group) {
-      group = await Group.create({
-        name: `Group - ${areaData.name}`,
-        area: areaData._id,
-        users: [newUser._id],
-      });
-    } else {
-      // Use $addToSet to prevent duplicates at database level
-      await Group.updateOne(
-        { _id: group._id },
-        { $addToSet: { users: newUser._id } },
-      );
+    // Only add to group if userType is 'user'
+    if (newUser.userType === "user") {
+      if (!group) {
+        group = await Group.create({
+          name: `Group - ${areaData.name}`,
+          area: areaData._id,
+          users: [newUser._id],
+        });
+      } else {
+        // Use $addToSet to prevent duplicates at database level
+        await Group.updateOne(
+          { _id: group._id },
+          { $addToSet: { users: newUser._id } },
+        );
+      }
     }
     const populatedUser = await User.findById(newUser._id)
       .select("-password -otp -resetToken")

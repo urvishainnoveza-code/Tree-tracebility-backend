@@ -148,6 +148,14 @@ const addUserToGroup = async (req, res) => {
       return res.status(404).json({ Status: 0, Message: "User not found" });
     }
 
+    // Only allow users with userType 'user' to be added to group
+    if (user.userType !== "user") {
+      return res.status(400).json({
+        Status: 0,
+        Message: "Only users with userType 'user' can be added to a group.",
+      });
+    }
+
     // Check if user is already in group
     const userIds = group.users.map((id) => id.toString());
     if (userIds.includes(userId)) {
