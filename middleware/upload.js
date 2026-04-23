@@ -14,18 +14,18 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-//cloudinary storage 
+//cloudinary storage
 const storage = new CloudinaryStorage({
   cloudinary,
   params: {
-    folder: "plantations",      
-    allowed_formats: ["jpg", "jpeg", "png", "webp"], 
+    folder: "plantations",
+    allowed_formats: ["jpg", "jpeg", "png", "webp"],
     //transformation: [{ width: 400, height: 400, crop: "limit" }],
   },
 });
 
-//multer 
-const upload = multer({
+//multer
+const multerUpload = multer({
   storage,
   limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
   fileFilter: (req, file, cb) => {
@@ -38,6 +38,46 @@ const upload = multer({
     }
   },
 });
+
+// Error handling wrapper for upload middleware
+const handleMulterError = (multerMiddleware) => {
+  return (req, res, next) => {
+    multerMiddleware(req, res, (err) => {
+      if (err) {
+        // Handle multer-specific errors
+        if (err.code === "LIMIT_UNEXPECTED_FILE") {
+          // Allow unexpected fields to pass through (don't reject)
+          return next();
+        }
+        if (err.code === "LIMIT_FILE_SIZE") {
+          return res.status(400).json({
+            Status: 0,
+            Message: "File size exceeds 5MB limit",
+          });
+        }
+        if (err.message && err.message.includes("Only images are allowed")) {
+          return res.status(400).json({
+            Status: 0,
+            Message: err.message,
+          });
+        }
+        // Generic multer error
+        return res.status(400).json({
+          Status: 0,
+          Message: err.message || "File upload error",
+        });
+      }
+      next();
+    });
+  };
+};
+
+// Safe upload middleware with error handling
+const upload = {
+  array: (fieldName, maxCount) => handleMulterError(multerUpload.any()),
+  single: (fieldName) => handleMulterError(multerUpload.any()),
+  none: () => handleMulterError(multerUpload.none()),
+};
 
 module.exports = upload;
 /*const multer = require("multer");
